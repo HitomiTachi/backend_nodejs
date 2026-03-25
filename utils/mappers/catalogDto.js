@@ -13,6 +13,7 @@ function toCategoryDto(row) {
         name: row.name,
         slug: row.slug
     };
+    if (row.parent_id != null) dto.parentId = row.parent_id;
     if (row.icon != null && String(row.icon).trim() !== '') dto.icon = row.icon;
     if (row.imageUrl != null && String(row.imageUrl).trim() !== '') dto.imageUrl = row.imageUrl;
     return dto;

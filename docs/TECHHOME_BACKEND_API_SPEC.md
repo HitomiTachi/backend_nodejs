@@ -78,7 +78,8 @@ Path trong cột **Path** = nối sau base URL (vd. base `.../api` + path `/heal
 | Method | Path | Query / Body | Response JSON |
 |--------|------|----------------|---------------|
 | GET | `/health` | — | `{ "status": string }` |
-| GET | `/categories` | — | `CategoryDto[]` |
+| GET | `/categories` | Query: `parentId?` (number or `null`) để lấy danh mục con theo cha | `CategoryDto[]` |
+| GET | `/categories/children/slug/:slug` | `slug` của danh mục cha | `CategoryDto[]` |
 | GET | `/products` | Query: `category?` (number), `q?`, `page?`, `size?` — có thể rỗng | `ProductDto[]` |
 | GET | `/products/:id` | `id` numeric | `ProductDto` |
 | GET | `/products/featured` | — | `ProductDto[]` |
@@ -116,6 +117,7 @@ Path trong cột **Path** = nối sau base URL (vd. base `.../api` + path `/heal
   id: number;
   name: string;
   slug: string;
+  parentId?: number | null; // null => danh mục cha (top-level)
   icon?: string | null;
   imageUrl?: string | null;
 }

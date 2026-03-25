@@ -79,7 +79,13 @@ const Product = {
 
         const filter = { $and: [notDeletedFilter()] };
         if (categoryId != null && categoryId !== '') {
-            filter.$and.push({ category_id: Number(categoryId) });
+            const parentIdNum = Number(categoryId);
+            // If the given category is a parent, include products from its children.
+            // This keeps storefront behavior consistent across pages that only pass `category=<id>`.
+            const children = await Category.find({ parent_id: parentIdNum });
+            const childIds = (children || []).map((c) => Number(c.id)).filter((n) => Number.isFinite(n));
+            const ids = [parentIdNum, ...childIds];
+            filter.$and.push({ category_id: { $in: ids } });
         }
         if (qText) {
             filter.$and.push({ name: { $regex: new RegExp(escapeRegex(qText), 'i') } });

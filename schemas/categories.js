@@ -5,6 +5,12 @@ const categorySchema = new mongoose.Schema({
     id: { type: Number, unique: true, index: true },
     name: String,
     slug: { type: String, unique: true, index: true },
+    /**
+     * parent_id defines category hierarchy (parent/child).
+     * - null: top-level (danh mục cha)
+     * - number: child category (danh mục con) referencing categories.id
+     */
+    parent_id: { type: Number, default: null, index: true },
     icon: String,
     /** URL ảnh đại diện danh mục (storefront / menu); tuỳ chọn */
     imageUrl: String

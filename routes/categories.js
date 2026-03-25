@@ -14,6 +14,14 @@ function isDuplicateKeyError(err) {
 
 router.get('/', async function (req, res, next) {
     try {
+        const parentIdRaw = req.query.parentId;
+        if (parentIdRaw !== undefined && parentIdRaw !== null && String(parentIdRaw).trim() !== '') {
+            const s = String(parentIdRaw).trim().toLowerCase();
+            const asNull = s === 'null' || s === 'undefined' || s === 'none';
+            const parentId = asNull ? null : Number(parentIdRaw);
+            const data = await Category.find({ parent_id: parentId });
+            return res.json(data.map(toCategoryDto));
+        }
         const data = await Category.find();
         res.json(data.map(toCategoryDto));
     } catch (error) {
@@ -31,6 +39,18 @@ router.get('/slug/:slug', async function (req, res, next) {
         }
     } catch (error) {
         res.status(404).json({ message: 'SLUG NOT FOUND' });
+    }
+});
+
+// Convenient endpoint: get children categories by parent slug.
+router.get('/children/slug/:slug', async function (req, res, next) {
+    try {
+        const parent = await Category.findOne({ slug: req.params.slug });
+        if (!parent) return res.status(404).json({ message: 'PARENT_SLUG_NOT_FOUND' });
+        const children = await Category.find({ parent_id: Number(parent.id) });
+        return res.json(children.map(toCategoryDto));
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
     }
 });
 
@@ -62,6 +82,14 @@ router.post('/', async function (req, res, next) {
             const v = req.body.imageUrl;
             data.imageUrl = typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
         }
+        // Optional hierarchy
+        if (req.body.parentId !== undefined) {
+            const p = req.body.parentId;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+        } else if (req.body.parent_id !== undefined) {
+            const p = req.body.parent_id;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+        }
         const newObj = await Category.create(data);
         res.json(toCategoryDto(newObj));
     } catch (error) {
@@ -88,6 +116,15 @@ router.put('/:id', async function (req, res, next) {
             if (clash) return res.status(409).json({ message: 'DUPLICATE_SLUG' });
             data.name = name;
             data.slug = slug;
+        }
+        // Optional hierarchy
+        if (data.parentId !== undefined) {
+            const p = data.parentId;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+            delete data.parentId;
+        } else if (data.parent_id !== undefined) {
+            const p = data.parent_id;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
         }
         const result = await Category.update(req.params.id, data);
         if (!result) return res.status(404).json({ message: 'ID NOT FOUND' });
