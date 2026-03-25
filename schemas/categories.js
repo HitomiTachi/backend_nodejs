@@ -1,50 +1,64 @@
-const db = require('../utils/data');
+const mongoose = require('mongoose');
+const { nextSequentialId } = require('../utils/id');
+
+const categorySchema = new mongoose.Schema({
+    id: { type: Number, unique: true, index: true },
+    name: String,
+    slug: { type: String, unique: true, index: true },
+    icon: String,
+    /** URL ảnh đại diện danh mục (storefront / menu); tuỳ chọn */
+    imageUrl: String
+});
+
+const CategoryModel = mongoose.models.Category || mongoose.model('Category', categorySchema);
+
+function stripDoc(doc) {
+    if (!doc) return null;
+    const o = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+    delete o.__v;
+    return o;
+}
 
 const Category = {
     async find(conditions = {}) {
-        const keys = Object.keys(conditions);
-        if (keys.length === 0) {
-            const [rows] = await db.query('SELECT * FROM categories');
-            return rows;
-        }
-        const where = keys.map(k => `\`${k}\` = ?`).join(' AND ');
-        const values = keys.map(k => conditions[k]);
-        const [rows] = await db.query(`SELECT * FROM categories WHERE ${where}`, values);
-        return rows;
+        const q = Object.keys(conditions).length ? conditions : {};
+        const docs = await CategoryModel.find(q).lean();
+        return docs.map(stripDoc);
     },
 
     async findOne(conditions) {
-        const keys = Object.keys(conditions);
-        const where = keys.map(k => `\`${k}\` = ?`).join(' AND ');
-        const values = keys.map(k => conditions[k]);
-        const [rows] = await db.query(
-            `SELECT * FROM categories WHERE ${where} LIMIT 1`,
-            values
-        );
-        return rows[0] || null;
+        const doc = await CategoryModel.findOne(conditions).lean();
+        return stripDoc(doc);
     },
 
     async findById(id) {
-        const [rows] = await db.query(
-            'SELECT * FROM categories WHERE id = ? LIMIT 1',
-            [id]
-        );
-        return rows[0] || null;
+        const doc = await CategoryModel.findOne({ id: Number(id) }).lean();
+        return stripDoc(doc);
+    },
+
+    /** Trùng slug với bản ghi khác (dùng khi PUT đổi tên). */
+    async findOneBySlugExcludingId(slug, excludeNumericId) {
+        const doc = await CategoryModel.findOne({
+            slug,
+            id: { $ne: Number(excludeNumericId) }
+        }).lean();
+        return stripDoc(doc);
     },
 
     async create(data) {
-        const [result] = await db.query('INSERT INTO categories SET ?', [data]);
-        return await Category.findById(result.insertId);
+        const id = await nextSequentialId(CategoryModel);
+        const doc = await CategoryModel.create({ ...data, id });
+        return stripDoc(doc.toObject());
     },
 
     async update(id, data) {
-        await db.query('UPDATE categories SET ? WHERE id = ?', [data, id]);
-        return await Category.findById(id);
+        const doc = await CategoryModel.findOneAndUpdate({ id: Number(id) }, { $set: data }, { new: true }).lean();
+        return stripDoc(doc);
     },
 
     async delete(id) {
-        const [result] = await db.query('DELETE FROM categories WHERE id = ?', [id]);
-        return result.affectedRows > 0;
+        const r = await CategoryModel.deleteOne({ id: Number(id) });
+        return r.deletedCount > 0;
     }
 };
 

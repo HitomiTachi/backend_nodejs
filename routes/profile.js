@@ -1,65 +1,55 @@
 var express = require('express');
 var router = express.Router();
 const { checkLogin } = require('../utils/authHandler');
-const db = require('../utils/data');
+const userController = require('../controllers/users');
+const { toProfileDto } = require('../utils/mappers/profileDto');
 
-// Lấy profile của user đang đăng nhập
+function pickProfileUpdate(body) {
+    const updateData = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.gender !== undefined) updateData.gender = body.gender;
+
+    const dob = body.dateOfBirth !== undefined ? body.dateOfBirth : body.date_of_birth;
+    if (dob !== undefined) {
+        updateData.date_of_birth = dob === null || dob === '' ? null : new Date(dob);
+    }
+
+    const addr = body.defaultAddress !== undefined ? body.defaultAddress : body.default_address;
+    if (addr !== undefined) updateData.default_address = addr;
+
+    const avatar = body.avatarUrl !== undefined ? body.avatarUrl : body.avatar_url;
+    if (avatar !== undefined) updateData.avatar_url = avatar;
+
+    return updateData;
+}
+
 router.get('/', checkLogin, async function (req, res, next) {
     try {
         const userId = req.user.id;
-        const [rows] = await db.query(
-            `SELECT u.id, u.name, u.email, u.created_at,
-                    p.phone, p.gender, p.date_of_birth, p.default_address, p.avatar_url
-             FROM users u
-             LEFT JOIN profiles p ON p.user_id = u.id
-             WHERE u.id = ? LIMIT 1`,
-            [userId]
-        );
-        if (!rows.length) return res.status(404).send({ message: 'User not found' });
-        res.send(rows[0]);
+        const row = await userController.FindById(userId);
+        if (!row) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json(toProfileDto(row));
     } catch (err) {
-        res.status(500).send({ message: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 
-// Cập nhật profile
 router.put('/', checkLogin, async function (req, res, next) {
     try {
         const userId = req.user.id;
-        const { name, phone, gender, date_of_birth, default_address, avatar_url } = req.body;
+        const updateData = pickProfileUpdate(req.body);
 
-        if (name) {
-            await db.query('UPDATE users SET name = ? WHERE id = ?', [name, userId]);
+        if (Object.keys(updateData).length > 0) {
+            await userController.UpdateUser(userId, updateData);
         }
 
-        const profileData = {};
-        if (phone !== undefined) profileData.phone = phone;
-        if (gender !== undefined) profileData.gender = gender;
-        if (date_of_birth !== undefined) profileData.date_of_birth = date_of_birth;
-        if (default_address !== undefined) profileData.default_address = default_address;
-        if (avatar_url !== undefined) profileData.avatar_url = avatar_url;
-
-        if (Object.keys(profileData).length > 0) {
-            const [existing] = await db.query('SELECT id FROM profiles WHERE user_id = ?', [userId]);
-            if (existing.length) {
-                await db.query('UPDATE profiles SET ? WHERE user_id = ?', [profileData, userId]);
-            } else {
-                profileData.user_id = userId;
-                await db.query('INSERT INTO profiles SET ?', [profileData]);
-            }
-        }
-
-        const [rows] = await db.query(
-            `SELECT u.id, u.name, u.email, u.created_at,
-                    p.phone, p.gender, p.date_of_birth, p.default_address, p.avatar_url
-             FROM users u
-             LEFT JOIN profiles p ON p.user_id = u.id
-             WHERE u.id = ? LIMIT 1`,
-            [userId]
-        );
-        res.send(rows[0]);
+        const row = await userController.FindById(userId);
+        res.json(toProfileDto(row));
     } catch (err) {
-        res.status(500).send({ message: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 

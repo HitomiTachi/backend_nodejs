@@ -1,13 +1,18 @@
-const mysql = require('mysql2/promise');
+const mongoose = require('mongoose');
 
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'techhome',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/techhome';
 
-module.exports = pool;
+function connectDB() {
+    mongoose.connection.on('connected', function () {
+        console.log('MongoDB connected');
+    });
+    mongoose.connection.on('disconnected', function () {
+        console.log('MongoDB disconnected');
+    });
+    return mongoose.connect(uri);
+}
+
+module.exports = {
+    mongoose,
+    connectDB
+};
