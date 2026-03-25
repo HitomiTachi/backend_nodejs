@@ -1,38 +1,38 @@
-# Hướng dẫn chạy backend và test API (Postman)
+# Chạy backend và test API (Postman)
 
-Tài liệu này mô tả cách khởi động backend TechHome, biến môi trường, seed dữ liệu mẫu và gọi API qua Postman. Chi tiết contract API xem `TECHHOME_BACKEND_API_SPEC.md`; snapshot code thực tế xem `FRONTEND_BACKEND_STATUS.md`.
+Hướng dẫn khởi động backend Node.js (`backend_nodejs`), cấu hình biến môi trường, JWT RS256 và gọi API qua Postman. **Contract chi tiết:** [TECHHOME_BACKEND_API_SPEC.md](./TECHHOME_BACKEND_API_SPEC.md). **Body mẫu đồng bộ với storefront:** [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md).
 
 ---
 
-## 1. Điều kiện cần
+## 1. Điều kiện
 
 | Thành phần | Ghi chú |
 |------------|---------|
-| Node.js | Trong thư mục `backend_nodejs` chạy `npm install`. |
+| Node.js | Trong `backend_nodejs`: `npm install`. |
 | MongoDB | Local hoặc Atlas. Mặc định: `mongodb://127.0.0.1:27017/techhome` nếu không set `MONGODB_URI` (`utils/data.js`). |
-| JWT RS256 | Bắt buộc có cặp khóa — xem mục 2. |
+| JWT RS256 | Bắt buộc — xem mục 2. |
 
-- **Port mặc định:** `8080` (`PORT` trong `.env` hoặc `bin/www`).
-- **Base URL API:** `http://localhost:8080/api` — mọi path trong bảng endpoint là **sau** `/api`.
-- **Alias:** Cùng handler mount tại `/api/...` và `/api/v1/...` (`app.js`).
-- Backend đã cấu hình `dotenv` trong `bin/www`, nên file `.env` được nạp tự động khi chạy `npm start`.
+- **Port:** `8080` (`PORT` trong `.env` hoặc mặc định trong `bin/www`).
+- **Base URL API:** `http://localhost:8080/api` — mọi path trong tài liệu là **sau** `/api`.
+- **Bản song song:** Cùng handler gắn tại `/api/...` và `/api/v1/...` (`app.js`). Postman có thể dùng `{{base_url}}` = `http://localhost:8080/api` hoặc `http://localhost:8080/api/v1` — hành vi giống nhau cho auth, products, categories, cart, profile, orders.
+- **dotenv:** `require('dotenv').config()` trong `bin/www` — chạy `npm start` sẽ nạp `.env` cạnh `package.json`.
 
 ---
 
-## 2. Tạo khóa JWT (bắt buộc)
+## 2. JWT RS256 (bắt buộc)
 
-Backend dùng **JWT RS256** (`utils/authToken.js`). Không cấu hình khóa thì đăng ký/đăng nhập sẽ lỗi.
+Backend ký JWT bằng **RS256** (`utils/authToken.js`). Thiếu khóa hợp lệ thì đăng ký/đăng nhập sẽ lỗi khi ký token.
 
-### Cách A — File PEM (khuyến nghị trên Windows)
+### Cách A — File PEM (khuyến nghị)
 
-Trong thư mục `backend_nodejs`, tạo thư mục `keys` và chạy (Git Bash hoặc OpenSSL đã cài):
+Tạo thư mục `keys` trong `backend_nodejs`, sinh cặp khóa (Git Bash, OpenSSL, v.v.):
 
 ```bash
 openssl genrsa -out keys/private.pem 2048
 openssl rsa -in keys/private.pem -pubout -out keys/public.pem
 ```
 
-Trong file `.env` (copy từ `.env.example`):
+Trong `.env`:
 
 ```env
 PORT=8080
@@ -41,16 +41,18 @@ JWT_PRIVATE_KEY_PATH=./keys/private.pem
 JWT_PUBLIC_KEY_PATH=./keys/public.pem
 ```
 
+Có thể đặt tên file khác miễn trỏ đúng `JWT_*_KEY_PATH`. Mẫu đầy đủ (kèm PEM một dòng): [`.env.example`](../.env.example).
+
 ### Cách B — Biến môi trường một dòng
 
 Gán `JWT_PRIVATE_KEY` và `JWT_PUBLIC_KEY` là chuỗi PEM **một dòng**, dùng `\n` thay cho xuống dòng (xem `.env.example`).
 
 ---
 
-## 3. Khởi động backend
+## 3. Khởi động
 
-1. Bật MongoDB (service hoặc URI `MONGODB_URI`).
-2. Tạo file `.env` cạnh `package.json` (nội dung như mục 2).
+1. Bật MongoDB (hoặc URI Atlas trong `MONGODB_URI`).
+2. Tạo `.env` (mục 2).
 3. PowerShell:
 
 ```powershell
@@ -59,142 +61,95 @@ npm install
 npm start
 ```
 
-`npm start` chạy nodemon và `bin/www`. Khi thấy log lắng nghe port và `MongoDB connected` là ổn.
+`npm start` chạy `nodemon ./bin/www`. Log `MongoDB connected` và server lắng nghe port là ổn.
 
 ---
 
-## 4. Cấu hình Postman
+## 4. Postman
 
 1. Tạo **Environment** (ví dụ `TechHome Local`):
    - `base_url` = `http://localhost:8080/api`
-   - `token` = để trống, cập nhật sau khi login.
-2. Với các request cần đăng nhập, thêm header:
-   - `Authorization`: `Bearer {{token}}`
-   - `Content-Type`: `application/json`
+   - `token` = để trống, gán sau khi login.
+2. Request có body JSON: `Content-Type: application/json`.
+3. Route cần đăng nhập: `Authorization: Bearer {{token}}`.
 
 ---
 
 ## 5. Thứ tự test gợi ý
 
-### 5.1 Health (không cần token)
+### 5.1 Health (public)
 
 | Method | URL | Kỳ vọng |
 |--------|-----|--------|
-| GET | `{{base_url}}/health` | 200, `{"status":"ok"}` |
+| GET | `{{base_url}}/health` | `200`, ví dụ `{"status":"ok"}` |
 
-### 5.2 Seed dữ liệu mẫu (khi MongoDB trống)
+### 5.2 Seed catalog (khi DB trống hoặc cần mẫu)
 
-Nếu không seed, `GET /categories` và `GET /products` trả mảng rỗng.
+Không cần token. Thứ tự và JSON **khớp mock storefront** `techhome-e-commerce/src/data/index.ts` (mảng `products`) — chi tiết [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.
 
-**Tạo danh mục**
+Tóm tắt:
 
-- **POST** `{{base_url}}/categories`
+- **POST** `{{base_url}}/categories` — tạo bốn danh mục (Smartphones, Tablets, Audio, Accessories), ghi **`id`** trả về.
+- **POST** `{{base_url}}/products` — `categoryId` = `id` danh mục vừa tạo; bắt buộc `name`, `categoryId` (hoặc `category_id`), `price`.
 
-```json
-{
-  "name": "Điện thoại"
-}
-```
-
-Ghi lại **`id`** trong response (ví dụ `1`) để dùng làm `categoryId`.
-
-**Trùng slug:** Không tạo hai danh mục trùng `slug` (cùng tên sau khi chuẩn hoá). Response lỗi: **`409`**, `{"message":"DUPLICATE_SLUG"}`. Chi tiết mã lỗi và migration DB xem [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.1.
-
-**Tạo sản phẩm**
-
-- **POST** `{{base_url}}/products`
-
-```json
-{
-  "name": "iPhone 15 Pro",
-  "categoryId": 1,
-  "price": 25990000,
-  "salePrice": 24990000,
-  "stock": 50,
-  "featured": true,
-  "description": "Điện thoại mẫu test",
-  "image": "https://picsum.photos/seed/iphone15/400/400",
-  "images": ["https://picsum.photos/seed/iphone15a/400/400"],
-  "colors": [{ "name": "Titan", "hex": "#3d3d3d" }],
-  "storageOptions": ["128GB", "256GB"]
-}
-```
-
-Thay `categoryId` bằng id danh mục thực tế. Ghi lại **`id`** sản phẩm để dùng cho giỏ/đơn.
-
-**Lưu ý:** `POST /products` trong code hiện không bắt `checkLogin` — chỉ nên dùng trong môi trường dev; production cần bảo vệ admin.
+**Lưu ý:** `POST /products` và `POST /categories` hiện **không** bắt `checkLogin` — chỉ dùng môi trường dev; production nên bảo vệ admin.
 
 **Đọc catalog (public)**
 
-- GET `{{base_url}}/categories`
-- GET `{{base_url}}/products?page=0&size=20`
-- GET `{{base_url}}/products/featured`
-- GET `{{base_url}}/products/<id>` (thay `<id>` bằng id số)
+| Method | URL | Ghi chú |
+|--------|-----|--------|
+| GET | `{{base_url}}/categories` | Toàn bộ; hoặc `?parentId=<số>` / `parentId=null` để lọc theo cha |
+| GET | `{{base_url}}/categories/slug/<slug>` | Chi tiết theo slug |
+| GET | `{{base_url}}/categories/children/slug/<slug>` | Danh mục con theo slug cha |
+| GET | `{{base_url}}/products?page=0&size=20` | Query **`category`** = id danh mục (số), không phải tên field body `categoryId` |
+| GET | `{{base_url}}/products?q=iPhone` | Tìm theo tên |
+| GET | `{{base_url}}/products/featured` | Sản phẩm `featured: true` |
+| GET | `{{base_url}}/products/<id>` | `id` số |
+| GET | `{{base_url}}/products/slug/<slug>` | Theo slug sản phẩm |
 
 ### 5.3 Đăng ký / đăng nhập
 
-Mật khẩu đăng ký phải **mạnh**: tối thiểu 8 ký tự, có chữ hoa, chữ thường, số, ký tự đặc biệt (`utils/validatorHandler.js`).
+Mật khẩu mạnh: tối thiểu 8 ký tự, có chữ hoa, chữ thường, số, ký tự đặc biệt (`utils/validatorHandler.js` — `isStrongPassword`).
 
-**POST** `{{base_url}}/auth/register`
-
-```json
-{
-  "name": "Nguyen Van Test",
-  "email": "testuser@local.dev",
-  "password": "Demo@1234"
-}
-```
+**POST** `{{base_url}}/auth/register` — `201`, body có `token` + `user`.
 
 **POST** `{{base_url}}/auth/login`
 
-```json
-{
-  "email": "testuser@local.dev",
-  "password": "Demo@1234"
-}
-```
-
-Copy `token` từ response vào biến Postman `{{token}}`.
-
-**GET** `{{base_url}}/auth/me` (Bearer) — kiểm tra user hiện tại.
+**GET** `{{base_url}}/auth/me` (Bearer) — user hiện tại.
 
 ### 5.4 Profile (Bearer)
 
 - **GET** `{{base_url}}/profile`
-- **PUT** `{{base_url}}/profile` — body theo field backend cho phép (xem `routes/profile.js` nếu cần).
+- **PUT** `{{base_url}}/profile` — field được phép: xem `routes/profile.js` và spec.
 
 ### 5.5 Giỏ hàng (Bearer)
 
-- **POST** `{{base_url}}/cart/items` — `productId` là id số sản phẩm trong DB:
-
-```json
-{
-  "productId": "1",
-  "quantity": 2
-}
-```
-
+- **POST** `{{base_url}}/cart/items` — `productId` (số hoặc chuỗi số), `quantity`, tuỳ chọn `variant` (ví dụ `256GB` hoặc `Natural Titanium, 256GB`).
 - **GET** `{{base_url}}/cart`
-- **PATCH** `{{base_url}}/cart/items/<cartLineId>` — body `{ "quantity": <số> }`; `cartLineId` lấy từ mảng giỏ (field `id` của từng dòng).
+- **PUT** `{{base_url}}/cart` — thay toàn bộ: `{ "items": [ { "productId", "quantity", "variant"? }, ... ] }`
+- **PATCH** `{{base_url}}/cart/items/<cartLineId>` — `{ "quantity": <số> }`; `cartLineId` là `_id` dòng trong giỏ (chuỗi), lấy từ `GET /cart` field `id`.
 - **DELETE** `{{base_url}}/cart/items/<cartLineId>`
+
+Legacy (vẫn hoạt động): `POST /cart`, `PUT /cart/:itemId`, `DELETE /cart/:itemId` — xem `routes/cart.js`.
 
 ### 5.6 Đơn hàng (Bearer)
 
-Server **tự tính tổng và giá** từ DB; body `items` cần `productId` + `quantity` hợp lệ.
+Server **chỉ** dùng mảng `items` (`productId` + `quantity`); **tự** tính giá và tổng, **tự** trừ tồn kho trong transaction.
 
 **POST** `{{base_url}}/orders`
 
 ```json
 {
-  "totalPrice": 0,
   "items": [
-    { "productId": 1, "quantity": 1, "price": 0 }
+    { "productId": 1, "quantity": 1 }
   ]
 }
 ```
 
+Không cần gửi `totalPrice` / `price` trong từng dòng — gửi sẽ bị bỏ qua khi tính đơn.
+
 - **GET** `{{base_url}}/orders`
-- **GET** `{{base_url}}/orders/<id>`
+- **GET** `{{base_url}}/orders/<id>` — `id` số của đơn
 
 ### 5.7 Đổi mật khẩu (Bearer)
 
@@ -203,29 +158,39 @@ Server **tự tính tổng và giá** từ DB; body `items` cần `productId` + 
 ```json
 {
   "currentPassword": "Demo@1234",
-  "newPassword": "Demo@5678"
+  "newPassword": "NewDemo@5678"
 }
 ```
 
----
-
-## 6. Đồng bộ với frontend
-
-Trong project `techhome-e-commerce`, đặt:
-
-`VITE_API_URL=http://localhost:8080/api` (không có `/` ở cuối).
+Sau khi đổi, đăng nhập lại với mật khẩu mới. Có route legacy `POST /auth/changepassword` (body `oldpassword` / `newpassword`).
 
 ---
 
-## 7. Xử lý lỗi thường gặp
+## 6. Đồng bộ với frontend `techhome-e-commerce`
+
+| Mục | Giá trị |
+|-----|---------|
+| Biến env | `VITE_API_URL=http://localhost:8080/api` (**không** có `/` ở cuối) — xem `techhome-e-commerce/.env.example` nếu có |
+| Dev server Vite | Port **3000** (`vite.config.ts`) |
+| CORS backend | `http://localhost:3000`, `127.0.0.1:3000`, `3001` (`app.js`) |
+
+Dữ liệu seed trong Postman nên **trùng tên danh mục / tên sản phẩm / giá hiệu lực** với mock trong `src/data/index.ts` để kiểm tra UI và API cùng lúc — chi tiết [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.
+
+**Lưu ý giá:** API lưu `price`/`salePrice`/`old_price` theo schema; DTO và giỏ hàng dùng `effectiveUnitPrice` (`utils/mappers/cartDto.js`) — giá trả khách = giá sale nếu nhỏ hơn `price`, xem [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.0.
+
+---
+
+## 7. Lỗi thường gặp
 
 | Hiện tượng | Hướng xử lý |
-|------------|-------------|
-| Không kết nối MongoDB | Kiểm tra MongoDB chạy, `MONGODB_URI` đúng. |
-| Lỗi khi register/login về JWT | Kiểm tra `.env` khóa hoặc `JWT_*_KEY_PATH`. |
+|------------|------------|
+| Không kết nối MongoDB | Kiểm tra service / `MONGODB_URI`. |
+| Lỗi JWT khi register/login | Kiểm tra `JWT_*_KEY_PATH` hoặc PEM trong `.env`. |
 | Register 400 (password) | Dùng mật khẩu đủ mạnh (ví dụ `Demo@1234`). |
-| `GET /products` rỗng | Chưa seed — làm mục 5.2. |
-| Cart / Orders lỗi sản phẩm | `productId` phải trùng id trong DB; đủ `stock`. |
+| `GET /products` rỗng | Chưa seed — làm [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2. |
+| Lọc sai danh mục | Dùng query `?category=<id_số>`, không nhầm với tên field body `categoryId`. |
+| Cart / Orders lỗi sản phẩm | `productId` khớp `id` trong DB; đủ `stock`. |
+| Trùng slug danh mục | `409` `DUPLICATE_SLUG` — đổi `name` hoặc xóa bản ghi cũ (dev). |
 
 ---
 
@@ -233,6 +198,7 @@ Trong project `techhome-e-commerce`, đặt:
 
 | File | Nội dung |
 |------|----------|
-| `TECHHOME_BACKEND_API_SPEC.md` | Contract API đầy đủ |
-| `FRONTEND_BACKEND_STATUS.md` | Hiện trạng backend vs frontend |
-| `../.env.example` | Mẫu biến môi trường |
+| [TECHHOME_BACKEND_API_SPEC.md](./TECHHOME_BACKEND_API_SPEC.md) | Contract API đầy đủ |
+| [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) | JSON mẫu đồng bộ hệ thống |
+| [FRONTEND_BACKEND_STATUS.md](./FRONTEND_BACKEND_STATUS.md) | Hiện trạng backend vs frontend |
+| [../.env.example](../.env.example) | Mẫu biến môi trường |

@@ -50,20 +50,16 @@ Không cần token. Thực hiện **theo thứ tự**: tạo danh mục trước
 ```json
 {
   "name": "Điện thoại",
-  "icon": "smartphone",
-  "imageUrl": "https://picsum.photos/seed/cat-phone/96/96"
+  "icon": "smartphone"
 }
 ```
-
-`imageUrl` là **tuỳ chọn** — URL ảnh đại diện cho menu storefront (header). Bỏ field hoặc để rỗng nếu chỉ dùng icon.
 
 **Tuỳ chọn — danh mục thứ hai:**
 
 ```json
 {
   "name": "Phụ kiện",
-  "icon": "headphones",
-  "imageUrl": "https://picsum.photos/seed/cat-acc/96/96"
+  "icon": "headphones"
 }
 ```
 
