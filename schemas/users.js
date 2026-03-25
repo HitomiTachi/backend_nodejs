@@ -1,72 +1,92 @@
-const db = require('../utils/data');
+const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
+const { nextSequentialId } = require('../utils/id');
+
+const userSchema = new mongoose.Schema(
+    {
+        id: { type: Number, unique: true, index: true },
+        name: String,
+        email: { type: String, unique: true, index: true },
+        password_hash: String,
+        password_changed_at: Date,
+        phone: String,
+        gender: String,
+        date_of_birth: Date,
+        default_address: String,
+        avatar_url: String,
+        role: { type: String, enum: ['USER', 'ADMIN', 'MODERATOR'], default: 'USER' }
+    },
+    { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
+);
+
+const UserModel = mongoose.models.User || mongoose.model('User', userSchema);
+
+function stripDoc(doc) {
+    if (!doc) return null;
+    const o = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+    delete o.__v;
+    return o;
+}
 
 const User = {
     async findById(id) {
-        const [rows] = await db.query(
-            'SELECT id, name, email, password_changed_at, created_at, updated_at FROM users WHERE id = ? LIMIT 1',
-            [id]
-        );
-        return rows[0] || null;
+        const doc = await UserModel.findOne({ id: Number(id) }).select('-password_hash').lean();
+        return stripDoc(doc);
     },
 
     async findByIdWithPassword(id) {
-        const [rows] = await db.query(
-            'SELECT * FROM users WHERE id = ? LIMIT 1',
-            [id]
-        );
-        return rows[0] || null;
+        const doc = await UserModel.findOne({ id: Number(id) }).lean();
+        return stripDoc(doc);
     },
 
     async findOne(conditions) {
-        const keys = Object.keys(conditions);
-        const where = keys.map(k => `\`${k}\` = ?`).join(' AND ');
-        const values = keys.map(k => conditions[k]);
-        const [rows] = await db.query(
-            `SELECT * FROM users WHERE ${where} LIMIT 1`,
-            values
-        );
-        return rows[0] || null;
+        const c = { ...conditions };
+        if (c.email) {
+            c.email = String(c.email).toLowerCase().trim();
+        }
+        const doc = await UserModel.findOne(c).lean();
+        return stripDoc(doc);
     },
 
     async find(conditions = {}) {
-        const keys = Object.keys(conditions);
-        if (keys.length === 0) {
-            const [rows] = await db.query(
-                'SELECT id, name, email, password_changed_at, created_at, updated_at FROM users'
-            );
-            return rows;
-        }
-        const where = keys.map(k => `\`${k}\` = ?`).join(' AND ');
-        const values = keys.map(k => conditions[k]);
-        const [rows] = await db.query(
-            `SELECT id, name, email, password_changed_at, created_at, updated_at FROM users WHERE ${where}`,
-            values
-        );
-        return rows;
+        const docs = await UserModel.find(conditions).select('-password_hash').lean();
+        return docs.map(stripDoc);
     },
 
     async create(data) {
-        if (data.password_hash) {
+        const id = await nextSequentialId(UserModel);
+        let password_hash = data.password_hash;
+        if (password_hash && !String(password_hash).startsWith('$2')) {
             const salt = bcrypt.genSaltSync(10);
-            data.password_hash = bcrypt.hashSync(data.password_hash, salt);
+            password_hash = bcrypt.hashSync(password_hash, salt);
         }
-        const [result] = await db.query('INSERT INTO users SET ?', [data]);
-        return await User.findById(result.insertId);
+        const email = data.email ? String(data.email).toLowerCase().trim() : data.email;
+        const doc = await UserModel.create({
+            ...data,
+            id,
+            email,
+            password_hash
+        });
+        const plain = stripDoc(doc.toObject());
+        if (plain) delete plain.password_hash;
+        return plain;
     },
 
     async update(id, data) {
-        if (data.password_hash) {
+        const upd = { ...data };
+        if (upd.password_hash && !String(upd.password_hash).startsWith('$2')) {
             const salt = bcrypt.genSaltSync(10);
-            data.password_hash = bcrypt.hashSync(data.password_hash, salt);
+            upd.password_hash = bcrypt.hashSync(upd.password_hash, salt);
         }
-        await db.query('UPDATE users SET ? WHERE id = ?', [data, id]);
-        return await User.findById(id);
+        const doc = await UserModel.findOneAndUpdate({ id: Number(id) }, { $set: upd }, { new: true }).lean();
+        const plain = stripDoc(doc);
+        if (plain) delete plain.password_hash;
+        return plain;
     },
 
     async delete(id) {
-        const [result] = await db.query('DELETE FROM users WHERE id = ?', [id]);
-        return result.affectedRows > 0;
+        const r = await UserModel.deleteOne({ id: Number(id) });
+        return r.deletedCount > 0;
     }
 };
 
