@@ -99,6 +99,14 @@ Thứ tự gợi ý trong spec §8 tương đương: health → catalog → auth
 - Ưu tiên body `{ message: string }` cho API.
 - Validator: có thể dùng 400 thay vì 404 cho lỗi validation nếu muốn rõ nghĩa — **khớp cách parse trong `api.ts` frontend**.
 
+### 4.7 Khi cần cập nhật frontend để khai thác G (fetch-specs)
+
+- Bạn muốn dùng thật tính năng G (không chỉ để backend “có endpoint”).
+- Team cần workflow admin làm giàu specs cho sản phẩm mới/import hàng loạt.
+- Trang chi tiết cần hiển thị thông số chuẩn hóa (chip, pin, màn hình, storage...) thay vì dữ liệu rời rạc.
+- Bạn muốn QA/UAT kiểm chứng end-to-end “bấm enrich -> dữ liệu đổi ngay trên UI”.
+- Bạn cần giảm thao tác thủ công nhập specs trong CMS/admin.
+
 ---
 
 ## 5. Rủi ro / điểm cần thống nhất sớm

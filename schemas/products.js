@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { nextSequentialId } = require('../utils/id');
 const Category = require('./categories');
 const { escapeRegex } = require('../utils/mappers/catalogDto');
+const { enrichProductSpecs } = require('../utils/productSpecsEnricher');
 
 const colorSchema = new mongoose.Schema(
     {
@@ -133,6 +134,32 @@ const Product = {
         const doc = await ProductModel.findOne({ id: Number(id) }).lean();
         if (!doc) return null;
         if (publicOnly && doc.isDeleted === true) return null;
+        return enrichProduct(doc);
+    },
+
+    /**
+     * Enrich product technical specs and persist in DB.
+     * This keeps /products/:id/fetch-specs compatible with ProductDto contract.
+     */
+    async enrichSpecsById(id, options) {
+        const publicOnly = options && options.publicOnly;
+        const existing = await ProductModel.findOne({ id: Number(id) }).lean();
+        if (!existing) return null;
+        if (publicOnly && existing.isDeleted === true) return null;
+
+        const enrichedData = enrichProductSpecs(existing);
+        const doc = await ProductModel.findOneAndUpdate(
+            { id: Number(id) },
+            {
+                $set: {
+                    specifications: enrichedData.specifications,
+                    storageOptions: enrichedData.storageOptions,
+                    colors: enrichedData.colors
+                }
+            },
+            { new: true }
+        ).lean();
+
         return enrichProduct(doc);
     },
 

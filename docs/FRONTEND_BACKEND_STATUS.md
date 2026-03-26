@@ -25,7 +25,7 @@
 
 | Hạng mục | Trạng thái |
 |----------|------------|
-| Health, Catalog (categories / products / featured / fetch-specs) | **Đã triển khai** — response JSON DTO gần/khớp spec |
+| Health, Catalog (categories / products / featured / fetch-specs) | **Đã triển khai** — response JSON DTO khớp spec; `fetch-specs` đã enrich + persist (không còn stub) |
 | Đăng ký / đăng nhập / `GET /auth/me` | **Đã triển khai** — `AuthResponse` `{ token, user }` |
 | Middleware `checkLogin` | **Bearer trước**, cookie `token_login_tungNT` sau |
 | Middleware `CheckPermission` | **Đã active** — kiểm tra role thực thi, trả 403 `ban khong co quyen` khi thiếu quyền |
@@ -85,9 +85,21 @@ Prefix: `/categories`, `/products` (dưới `/api` hoặc `/api/v1`).
 | GET | `/products` | `category`, `q`, `page`, `size` (optional; `size` tối đa 200 khi phân trang) | `ProductDto[]` |
 | GET | `/products/featured` | — | `ProductDto[]` |
 | GET | `/products/:id` | `id` số | `ProductDto` hoặc 404 `{ message }` |
-| POST | `/products/:id/fetch-specs` | `{}` | `ProductDto` (stub — trả sản phẩm hiện có) |
+| POST | `/products/:id/fetch-specs` | `{}` | `ProductDto` (enrich specs + lưu DB, rồi trả dữ liệu mới nhất) |
 
 **Thêm (không trong bảng tối thiểu spec storefront):** `GET /products/slug/:slug`, CRUD admin `POST/PUT/DELETE /products`… — dùng khi cần; response create/update là `ProductDto`.
+
+**Chi tiết `fetch-specs` (trạng thái mới):**
+- Endpoint chạy enrich kỹ thuật từ dữ liệu hiện có (`name`, `description`, `storageOptions`, `colors`) và merge an toàn vào `specifications`.
+- Kết quả được **persist** vào MongoDB (`specifications`, và khi thiếu sẽ bổ sung `storageOptions`/`colors`), sau đó trả `ProductDto` đã cập nhật.
+- Gọi lặp lại vẫn idempotent theo hướng không phá dữ liệu sẵn có; chủ yếu bổ sung phần còn thiếu/metadata enrich.
+
+<!-- **Khi cần cập nhật frontend để dùng thật phần G (`fetch-specs`):**
+- Bạn muốn dùng thật tính năng G (không chỉ để backend “có endpoint”).
+- Team cần workflow admin làm giàu specs cho sản phẩm mới/import hàng loạt.
+- Trang chi tiết cần hiển thị thông số chuẩn hóa (chip, pin, màn hình, storage...) thay vì dữ liệu rời rạc.
+- Bạn muốn QA/UAT kiểm chứng end-to-end “bấm enrich -> dữ liệu đổi ngay trên UI”.
+- Bạn cần giảm thao tác thủ công nhập specs trong CMS/admin. -->
 
 **Lưu ý dữ liệu:** Nếu MongoDB trống, `GET /categories` / `/products` trả `[]` — cần seed hoặc tạo qua API admin.
 

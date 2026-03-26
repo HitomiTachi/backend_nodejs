@@ -79,7 +79,7 @@ router.get('/slug/:slug', async function (req, res, next) {
 
 router.post('/:id/fetch-specs', async function (req, res, next) {
     try {
-        const result = await Product.findById(req.params.id, { publicOnly: true });
+        const result = await Product.enrichSpecsById(req.params.id, { publicOnly: true });
         if (!result) {
             return res.status(404).json({ message: 'ID NOT FOUND' });
         }
