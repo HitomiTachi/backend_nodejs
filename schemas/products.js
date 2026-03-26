@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { nextSequentialId } = require('../utils/id');
 const Category = require('./categories');
 const { escapeRegex } = require('../utils/mappers/catalogDto');
+const { enrichProductSpecs } = require('../utils/productSpecsEnricher');
 
 const colorSchema = new mongoose.Schema(
     {
@@ -30,7 +31,9 @@ const productSchema = new mongoose.Schema({
     specifications: String,
     colors: [colorSchema],
     storageOptions: [String],
-    isDeleted: { type: Boolean, default: false }
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Number, default: null }
 });
 
 const ProductModel = mongoose.models.Product || mongoose.model('Product', productSchema);
@@ -79,7 +82,13 @@ const Product = {
 
         const filter = { $and: [notDeletedFilter()] };
         if (categoryId != null && categoryId !== '') {
-            filter.$and.push({ category_id: Number(categoryId) });
+            const parentIdNum = Number(categoryId);
+            // If the given category is a parent, include products from its children.
+            // This keeps storefront behavior consistent across pages that only pass `category=<id>`.
+            const children = await Category.find({ parent_id: parentIdNum });
+            const childIds = (children || []).map((c) => Number(c.id)).filter((n) => Number.isFinite(n));
+            const ids = [parentIdNum, ...childIds];
+            filter.$and.push({ category_id: { $in: ids } });
         }
         if (qText) {
             filter.$and.push({ name: { $regex: new RegExp(escapeRegex(qText), 'i') } });
@@ -130,6 +139,32 @@ const Product = {
         return enrichProduct(doc);
     },
 
+    /**
+     * Enrich product technical specs and persist in DB.
+     * This keeps /products/:id/fetch-specs compatible with ProductDto contract.
+     */
+    async enrichSpecsById(id, options) {
+        const publicOnly = options && options.publicOnly;
+        const existing = await ProductModel.findOne({ id: Number(id) }).lean();
+        if (!existing) return null;
+        if (publicOnly && existing.isDeleted === true) return null;
+
+        const enrichedData = enrichProductSpecs(existing);
+        const doc = await ProductModel.findOneAndUpdate(
+            { id: Number(id) },
+            {
+                $set: {
+                    specifications: enrichedData.specifications,
+                    storageOptions: enrichedData.storageOptions,
+                    colors: enrichedData.colors
+                }
+            },
+            { new: true }
+        ).lean();
+
+        return enrichProduct(doc);
+    },
+
     async create(data) {
         const id = await nextSequentialId(ProductModel);
         const doc = await ProductModel.create({ ...data, id });
@@ -141,9 +176,13 @@ const Product = {
         return enrichProduct(doc);
     },
 
-    async delete(id) {
-        const r = await ProductModel.deleteOne({ id: Number(id) });
-        return r.deletedCount > 0;
+    async delete(id, deletedBy) {
+        const doc = await ProductModel.findOneAndUpdate(
+            { id: Number(id) },
+            { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: deletedBy || null } },
+            { new: true }
+        ).lean();
+        return !!doc;
     }
 };
 

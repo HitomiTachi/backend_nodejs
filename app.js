@@ -44,6 +44,7 @@ app.use('/api/v1/roles', require('./routes/roles'));
 app.use('/api/v1/products', require('./routes/products'));
 app.use('/api/v1/categories', require('./routes/categories'));
 app.use('/api/v1/orders', require('./routes/orders'));
+app.use('/api/v1/inventories', require('./routes/inventories'));
 
 app.use('/api/users', require('./routes/users'));
 app.use('/api/auth', require('./routes/auth'));
@@ -51,10 +52,13 @@ app.use('/api/roles', require('./routes/roles'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/inventories', require('./routes/inventories'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/profile', require('./routes/profile'));
+app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/v1/cart', require('./routes/cart'));
 app.use('/api/v1/profile', require('./routes/profile'));
+app.use('/api/v1/uploads', require('./routes/uploads'));
 
 app.use(function (req, res, next) {
     next(createError(404));

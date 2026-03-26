@@ -12,6 +12,7 @@ Tạo Environment (ví dụ `TechHome Local`):
 |------|------------------|---------|
 | `base_url` | `http://localhost:8080/api` | |
 | `token` | *(để trống)* | Điền sau bước đăng nhập |
+| `idemKey` | *(để trống)* | Dùng cho `reservation` / `sold` idempotency |
 | `categoryId` | *(tuỳ chọn)* | Copy từ response sau khi tạo danh mục |
 | `productId` | *(tuỳ chọn)* | Copy từ response sau khi tạo sản phẩm |
 | `cartLineId` | *(tuỳ chọn)* | Copy từ `GET /cart` — `id` từng dòng |
@@ -39,7 +40,7 @@ Tạo Environment (ví dụ `TechHome Local`):
 
 ## 2. Seed dữ liệu catalog (khi DB trống hoặc cần thêm mẫu)
 
-Không cần token. Thực hiện **theo thứ tự**: tạo danh mục trước, lấy `id` → tạo sản phẩm với `categoryId` đúng.
+Cần token `ADMIN`. Thực hiện **theo thứ tự**: đăng nhập user admin trước, rồi tạo danh mục, lấy `id` → tạo sản phẩm với `categoryId` đúng.
 
 ### 2.1 Tạo danh mục
 
@@ -50,30 +51,28 @@ Không cần token. Thực hiện **theo thứ tự**: tạo danh mục trước
 ```json
 {
   "name": "Điện thoại",
-  "icon": "smartphone",
-  "imageUrl": "https://picsum.photos/seed/cat-phone/96/96"
+  "icon": "smartphone"
 }
 ```
-
-`imageUrl` là **tuỳ chọn** — URL ảnh đại diện cho menu storefront (header). Bỏ field hoặc để rỗng nếu chỉ dùng icon.
 
 **Tuỳ chọn — danh mục thứ hai:**
 
 ```json
 {
   "name": "Phụ kiện",
-  "icon": "headphones",
-  "imageUrl": "https://picsum.photos/seed/cat-acc/96/96"
+  "icon": "headphones"
 }
 ```
 
 Sau mỗi lần tạo, ghi **`id`** trong response (ví dụ `1`) — dùng cho bước sản phẩm.
+Yêu cầu header: `Authorization: Bearer {{token}}` (role `ADMIN`).
 
 **Trùng danh mục (slug):** `slug` được sinh từ `name` (chuẩn hoá, không dấu). Hai danh mục **không** được cùng `slug`. Nếu `POST /categories` hoặc `PUT /categories/:id` (khi đổi `name`) dẫn tới slug đã tồn tại ở bản ghi khác, API trả **`409`** với `{ "message": "DUPLICATE_SLUG" }`. Tên rỗng / không tạo được slug hợp lệ: **`400`** (`NAME_REQUIRED` hoặc `INVALID_SLUG`).
 
 ### 2.2 Tạo sản phẩm
 
 Thay `categoryId` bằng `id` danh mục thực tế (ví dụ `1`).
+Yêu cầu header: `Authorization: Bearer {{token}}` (role `ADMIN`).
 
 | Bước | Method | URL | Body |
 |------|--------|-----|------|
@@ -122,6 +121,7 @@ Ghi **`id`** sản phẩm để dùng cho giỏ hàng và đơn hàng.
 | 2.3.2 | GET | `{{base_url}}/products?page=0&size=20` |
 | 2.3.3 | GET | `{{base_url}}/products/featured` |
 | 2.3.4 | GET | `{{base_url}}/products/1` |
+| 2.3.5 | POST | `{{base_url}}/products/1/fetch-specs` |
 
 Ở bước 2.3.4, thay `1` bằng `id` sản phẩm thật từ DB.
 
@@ -177,6 +177,42 @@ Copy giá trị **`token`** từ response vào biến môi trường Postman `{{
 | Bước | Method | URL |
 |------|--------|-----|
 | 4.1.1 | GET | `{{base_url}}/profile` |
+
+### 4.1.2 Presign avatar (upload thẳng lên bucket)
+
+Cần biến môi trường S3 + `PUBLIC_ASSET_BASE_URL` (xem `.env.example`). Nếu chưa cấu hình: **503** `{ "code": "AVATAR_STORAGE_NOT_CONFIGURED" }`.
+
+| Bước | Method | URL | Body |
+|------|--------|-----|------|
+| 4.1.2.1 | POST | `{{base_url}}/profile/avatar/presign` | JSON bên dưới |
+
+```json
+{
+  "contentType": "image/jpeg",
+  "fileSize": 45000
+}
+```
+
+Response: `{ "uploadUrl", "publicUrl", "method": "PUT", "headers": { "Content-Type": "..." }, "expiresIn": 300 }`.  
+Tiếp theo: **PUT** `uploadUrl` với body = file nhị phân và header `Content-Type` trùng `headers`. Cuối cùng **PUT** `/profile` với `"avatarUrl": "<publicUrl>"` (chỉ URL `https://...`, không gửi base64).
+
+### 4.1.3 Presign ảnh admin (sản phẩm / danh mục)
+
+Cần **Bearer** user có role **ADMIN** hoặc **MODERATOR**. Cùng bucket/R2 với avatar; key prefix `products/...` hoặc `categories/...`.
+
+| Bước | Method | URL | Body |
+|------|--------|-----|------|
+| 4.1.3.1 | POST | `{{base_url}}/uploads/presign` | JSON bên dưới |
+
+```json
+{
+  "scope": "product",
+  "contentType": "image/jpeg",
+  "fileSize": 45000
+}
+```
+
+Response giống 4.1.2.1; sau đó **PUT** `uploadUrl` với file nhị phân.
 
 ### 4.2 Cập nhật profile
 
@@ -326,14 +362,77 @@ Sau khi đổi thành công, các request tiếp theo cần đăng nhập lại 
 
 ---
 
+## 8. Inventory idempotency (ADMIN)
+
+Ap dung cho 2 endpoint:
+
+- `POST /inventories/reservation`
+- `POST /inventories/sold`
+
+Can header:
+
+- `Authorization: Bearer {{token}}`
+- `Idempotency-Key: {{idemKey}}`
+
+### 8.1 Add stock truoc khi reservation
+
+```json
+{
+  "product": {{productId}},
+  "quantity": 10
+}
+```
+
+Request: `POST {{base_url}}/inventories/add-stock`
+
+### 8.2 Reservation voi idempotency key
+
+```json
+{
+  "product": {{productId}},
+  "quantity": 2
+}
+```
+
+Request: `POST {{base_url}}/inventories/reservation`
+
+Test:
+
+1. Gui lan 1 voi `Idempotency-Key: reserve-001`
+2. Gui lai lan 2 cung body + cung key `reserve-001`
+3. Ky vong lan 2 tra them `idempotentReplay: true`, khong tru stock lan nua
+
+### 8.3 Sold voi idempotency key
+
+```json
+{
+  "product": {{productId}},
+  "quantity": 1
+}
+```
+
+Request: `POST {{base_url}}/inventories/sold`  
+Header: `Idempotency-Key: sold-001`
+
+### 8.4 Kiem tra idempotency record
+
+- `GET {{base_url}}/inventories/idempotency/reservation/reserve-001`
+- `GET {{base_url}}/inventories/idempotency/sold/sold-001`
+
+Ky vong response co cac field `status`, `product`, `quantity`, `response`.
+
+---
+
 ## Tóm tắt thứ tự gợi ý
 
-1. **Health** → 2. **Categories + Products** (seed) → đọc **GET** catalog  
-3. **Register** → **Login** → lưu **token** → **GET /auth/me**  
+1. **Health** → **Register/Login admin** → lưu **token**  
+2. **Categories + Products** (seed) → đọc **GET** catalog  
+3. (Tuỳ chọn) **Register user thường** → **Login** → **GET /auth/me**  
 4. **GET/PUT profile**  
 5. **POST cart/items** → **GET cart** → (tuỳ chọn) **PATCH/DELETE** dòng  
 6. **POST orders** → **GET orders** / **GET orders/:id**  
-7. **POST change-password** (và login lại nếu cần tiếp tục test)
+7. **POST change-password** (và login lại nếu cần tiếp tục test)  
+8. **POST inventories/reservation + sold** với `Idempotency-Key`, sau đó GET idempotency record
 
 ---
 
@@ -341,7 +440,7 @@ Sau khi đổi thành công, các request tiếp theo cần đăng nhập lại 
 
 - `id` category/product phụ thuộc DB; luôn lấy từ **response** hoặc **GET** list, không giả định cố định là `1` nếu đã có dữ liệu cũ.
 - Đặt hàng sẽ **trừ tồn kho**; lỗi thường gặp: `productId` sai, không đủ `stock`.
-- `POST /products` và `POST /categories` trong môi trường dev có thể không bắt admin — production nên bảo vệ.
+- `POST /products` và `POST /categories` yêu cầu role `ADMIN`; token thường sẽ nhận `403`.
 - **Danh mục:** MongoDB có **unique index** trên `slug`. Nếu DB cũ đã có nhiều document trùng `slug`, cần gộp/xoá trùng hoặc đổi slug thủ công trước khi tạo index (hoặc drop collection trong dev).
 
 ---

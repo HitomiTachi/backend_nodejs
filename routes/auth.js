@@ -12,7 +12,7 @@ const bcrypt = require('bcrypt');
 const { checkLogin } = require('../utils/authHandler');
 const { sendMail } = require('../utils/senMailHandler');
 const { signAuthToken } = require('../utils/authToken');
-const { toAuthUserDto } = require('../utils/mappers/authDto');
+const { toAuthUserDto, postLoginRedirectPath } = require('../utils/mappers/authDto');
 
 const COOKIE_OPTS = {
     maxAge: 30 * 24 * 60 * 60 * 1000,
@@ -38,9 +38,11 @@ router.post('/register', RegisterValidator, handleResultValidator, async functio
         const newUser = await userController.CreateAnUser(name, password, email);
         const token = signAuthToken(newUser);
         setAuthCookie(res, token);
+        const userDto = toAuthUserDto(newUser);
         res.status(201).json({
             token: token,
-            user: toAuthUserDto(newUser)
+            user: userDto,
+            postLoginRedirect: postLoginRedirectPath(userDto)
         });
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -59,14 +61,21 @@ router.post('/login', async function (req, res, next) {
         if (!user) {
             return res.status(403).json({ message: 'tai khoan khong ton tai' });
         }
+        if (user.status === false) {
+            return res.status(403).json({ message: 'tai khoan dang bi ban' });
+        }
         if (!bcrypt.compareSync(password, user.password_hash)) {
             return res.status(403).json({ message: 'thong tin dang nhap khong dung' });
         }
+        await userController.UpdateUser(user.id, { loginCount: Number(user.loginCount || 0) + 1 });
+        const latestUser = await userController.FindById(user.id);
         const token = signAuthToken(user);
         setAuthCookie(res, token);
+        const userDto = toAuthUserDto(latestUser || user);
         res.json({
             token: token,
-            user: toAuthUserDto(user)
+            user: userDto,
+            postLoginRedirect: postLoginRedirectPath(userDto)
         });
     } catch (err) {
         res.status(500).json({ message: err.message });

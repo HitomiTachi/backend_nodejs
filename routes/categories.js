@@ -2,7 +2,9 @@ var express = require('express');
 var router = express.Router();
 const slugify = require('slugify');
 const Category = require('../schemas/categories');
-const { toCategoryDto } = require('../utils/mappers/catalogDto');
+const Product = require('../schemas/products');
+const { toCategoryDto, toProductDto } = require('../utils/mappers/catalogDto');
+const { checkLogin, CheckPermission } = require('../utils/authHandler');
 
 function buildCategorySlug(name) {
     return slugify(String(name).trim(), { replacement: '-', lower: true, locale: 'vi' });
@@ -14,10 +16,33 @@ function isDuplicateKeyError(err) {
 
 router.get('/', async function (req, res, next) {
     try {
-        const data = await Category.find();
-        res.json(data.map(toCategoryDto));
+        const nameQ = req.query.name != null ? String(req.query.name).trim().toLowerCase() : '';
+        const includeDeleted = String(req.query.includeDeleted || '').toLowerCase() === 'true';
+        const parentIdRaw = req.query.parentId;
+        if (parentIdRaw !== undefined && parentIdRaw !== null && String(parentIdRaw).trim() !== '') {
+            const s = String(parentIdRaw).trim().toLowerCase();
+            const asNull = s === 'null' || s === 'undefined' || s === 'none';
+            const parentId = asNull ? null : Number(parentIdRaw);
+            const data = await Category.find({ parent_id: parentId, includeDeleted });
+            const filtered = nameQ ? data.filter((e) => String(e.name || '').toLowerCase().includes(nameQ)) : data;
+            return res.json(filtered.map(toCategoryDto));
+        }
+        const data = await Category.find({ includeDeleted });
+        const filtered = nameQ ? data.filter((e) => String(e.name || '').toLowerCase().includes(nameQ)) : data;
+        res.json(filtered.map(toCategoryDto));
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+});
+
+router.get('/:id/products', async function (req, res, next) {
+    try {
+        const category = await Category.findById(req.params.id);
+        if (!category) return res.status(404).json({ message: 'ID NOT FOUND' });
+        const products = await Product.findCatalog({ categoryId: req.params.id });
+        return res.json(products.map(toProductDto));
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
     }
 });
 
@@ -34,9 +59,22 @@ router.get('/slug/:slug', async function (req, res, next) {
     }
 });
 
+// Convenient endpoint: get children categories by parent slug.
+router.get('/children/slug/:slug', async function (req, res, next) {
+    try {
+        const parent = await Category.findOne({ slug: req.params.slug });
+        if (!parent) return res.status(404).json({ message: 'PARENT_SLUG_NOT_FOUND' });
+        const children = await Category.find({ parent_id: Number(parent.id) });
+        return res.json(children.map(toCategoryDto));
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+});
+
 router.get('/:id', async function (req, res, next) {
     try {
-        const result = await Category.findById(req.params.id);
+        const includeDeleted = String(req.query.includeDeleted || '').toLowerCase() === 'true';
+        const result = await Category.findById(req.params.id, { includeDeleted });
         if (result) {
             res.status(200).json(toCategoryDto(result));
         } else {
@@ -47,7 +85,7 @@ router.get('/:id', async function (req, res, next) {
     }
 });
 
-router.post('/', async function (req, res, next) {
+router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const rawName = req.body && req.body.name;
         const name = typeof rawName === 'string' ? rawName.trim() : '';
@@ -62,6 +100,14 @@ router.post('/', async function (req, res, next) {
             const v = req.body.imageUrl;
             data.imageUrl = typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
         }
+        // Optional hierarchy
+        if (req.body.parentId !== undefined) {
+            const p = req.body.parentId;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+        } else if (req.body.parent_id !== undefined) {
+            const p = req.body.parent_id;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+        }
         const newObj = await Category.create(data);
         res.json(toCategoryDto(newObj));
     } catch (error) {
@@ -72,7 +118,7 @@ router.post('/', async function (req, res, next) {
     }
 });
 
-router.put('/:id', async function (req, res, next) {
+router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const data = { ...req.body };
         if (data.imageUrl !== undefined) {
@@ -89,6 +135,15 @@ router.put('/:id', async function (req, res, next) {
             data.name = name;
             data.slug = slug;
         }
+        // Optional hierarchy
+        if (data.parentId !== undefined) {
+            const p = data.parentId;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+            delete data.parentId;
+        } else if (data.parent_id !== undefined) {
+            const p = data.parent_id;
+            data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
+        }
         const result = await Category.update(req.params.id, data);
         if (!result) return res.status(404).json({ message: 'ID NOT FOUND' });
         res.status(200).json(toCategoryDto(result));
@@ -100,9 +155,9 @@ router.put('/:id', async function (req, res, next) {
     }
 });
 
-router.delete('/:id', async function (req, res, next) {
+router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
-        const deleted = await Category.delete(req.params.id);
+        const deleted = await Category.delete(req.params.id, req.user && req.user.id);
         if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });
         res.status(200).json({ message: 'deleted successfully' });
     } catch (error) {

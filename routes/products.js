@@ -2,7 +2,9 @@ var express = require('express');
 var router = express.Router();
 const slugify = require('slugify');
 const Product = require('../schemas/products');
+const Inventory = require('../schemas/inventories');
 const { toProductDto } = require('../utils/mappers/catalogDto');
+const { checkLogin, CheckPermission } = require('../utils/authHandler');
 
 function buildCreateUpdatePayload(body) {
     const name = body.name;
@@ -79,7 +81,7 @@ router.get('/slug/:slug', async function (req, res, next) {
 
 router.post('/:id/fetch-specs', async function (req, res, next) {
     try {
-        const result = await Product.findById(req.params.id, { publicOnly: true });
+        const result = await Product.enrichSpecsById(req.params.id, { publicOnly: true });
         if (!result) {
             return res.status(404).json({ message: 'ID NOT FOUND' });
         }
@@ -102,7 +104,7 @@ router.get('/:id', async function (req, res, next) {
     }
 });
 
-router.post('/', async function (req, res, next) {
+router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const body = req.body;
         const data = buildCreateUpdatePayload(body);
@@ -113,13 +115,14 @@ router.post('/', async function (req, res, next) {
             data.slug = slugify(data.name, { replacement: '-', lower: true, locale: 'vi' });
         }
         const newObj = await Product.create(data);
+        await Inventory.ensureForProduct(newObj.id);
         res.json(toProductDto(newObj));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 });
 
-router.put('/:id', async function (req, res, next) {
+router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const data = buildCreateUpdatePayload(req.body);
         if (data.name) {
@@ -136,9 +139,9 @@ router.put('/:id', async function (req, res, next) {
     }
 });
 
-router.delete('/:id', async function (req, res, next) {
+router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
-        const deleted = await Product.delete(req.params.id);
+        const deleted = await Product.delete(req.params.id, req.user && req.user.id);
         if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });
         res.status(200).json({ message: 'deleted successfully' });
     } catch (error) {
