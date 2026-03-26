@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const slugify = require('slugify');
 const Product = require('../schemas/products');
+const Inventory = require('../schemas/inventories');
 const { toProductDto } = require('../utils/mappers/catalogDto');
 const { checkLogin, CheckPermission } = require('../utils/authHandler');
 
@@ -114,6 +115,7 @@ router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res,
             data.slug = slugify(data.name, { replacement: '-', lower: true, locale: 'vi' });
         }
         const newObj = await Product.create(data);
+        await Inventory.ensureForProduct(newObj.id);
         res.json(toProductDto(newObj));
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -139,7 +141,7 @@ router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, re
 
 router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
-        const deleted = await Product.delete(req.params.id);
+        const deleted = await Product.delete(req.params.id, req.user && req.user.id);
         if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });
         res.status(200).json({ message: 'deleted successfully' });
     } catch (error) {

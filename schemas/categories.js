@@ -13,7 +13,10 @@ const categorySchema = new mongoose.Schema({
     parent_id: { type: Number, default: null, index: true },
     icon: String,
     /** URL ảnh đại diện danh mục (storefront / menu); tuỳ chọn */
-    imageUrl: String
+    imageUrl: String,
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Number, default: null }
 });
 
 const CategoryModel = mongoose.models.Category || mongoose.model('Category', categorySchema);
@@ -28,17 +31,32 @@ function stripDoc(doc) {
 const Category = {
     async find(conditions = {}) {
         const q = Object.keys(conditions).length ? conditions : {};
+        const includeDeleted = !!q.includeDeleted;
+        if (q.includeDeleted !== undefined) delete q.includeDeleted;
+        if (!includeDeleted) {
+            q.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
+        }
         const docs = await CategoryModel.find(q).lean();
         return docs.map(stripDoc);
     },
 
     async findOne(conditions) {
-        const doc = await CategoryModel.findOne(conditions).lean();
+        const q = { ...conditions };
+        const includeDeleted = !!q.includeDeleted;
+        if (q.includeDeleted !== undefined) delete q.includeDeleted;
+        if (!includeDeleted) {
+            q.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
+        }
+        const doc = await CategoryModel.findOne(q).lean();
         return stripDoc(doc);
     },
 
-    async findById(id) {
-        const doc = await CategoryModel.findOne({ id: Number(id) }).lean();
+    async findById(id, options = {}) {
+        const q = { id: Number(id) };
+        if (!options.includeDeleted) {
+            q.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
+        }
+        const doc = await CategoryModel.findOne(q).lean();
         return stripDoc(doc);
     },
 
@@ -62,9 +80,13 @@ const Category = {
         return stripDoc(doc);
     },
 
-    async delete(id) {
-        const r = await CategoryModel.deleteOne({ id: Number(id) });
-        return r.deletedCount > 0;
+    async delete(id, deletedBy) {
+        const doc = await CategoryModel.findOneAndUpdate(
+            { id: Number(id) },
+            { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: deletedBy || null } },
+            { new: true }
+        ).lean();
+        return !!doc;
     }
 };
 

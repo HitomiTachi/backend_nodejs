@@ -61,12 +61,17 @@ router.post('/login', async function (req, res, next) {
         if (!user) {
             return res.status(403).json({ message: 'tai khoan khong ton tai' });
         }
+        if (user.status === false) {
+            return res.status(403).json({ message: 'tai khoan dang bi ban' });
+        }
         if (!bcrypt.compareSync(password, user.password_hash)) {
             return res.status(403).json({ message: 'thong tin dang nhap khong dung' });
         }
+        await userController.UpdateUser(user.id, { loginCount: Number(user.loginCount || 0) + 1 });
+        const latestUser = await userController.FindById(user.id);
         const token = signAuthToken(user);
         setAuthCookie(res, token);
-        const userDto = toAuthUserDto(user);
+        const userDto = toAuthUserDto(latestUser || user);
         res.json({
             token: token,
             user: userDto,

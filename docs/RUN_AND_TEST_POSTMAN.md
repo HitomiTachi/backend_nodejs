@@ -85,14 +85,14 @@ npm start
 
 ### 5.2 Seed catalog (khi DB trống hoặc cần mẫu)
 
-Không cần token. Thứ tự và JSON **khớp mock storefront** `techhome-e-commerce/src/data/index.ts` (mảng `products`) — chi tiết [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.
+Cần token `ADMIN`. Thứ tự và JSON **khớp mock storefront** `techhome-e-commerce/src/data/index.ts` (mảng `products`) — chi tiết [POSTMAN_SAMPLE_DATA.md](./POSTMAN_SAMPLE_DATA.md) §2.
 
 Tóm tắt:
 
 - **POST** `{{base_url}}/categories` — tạo bốn danh mục (Smartphones, Tablets, Audio, Accessories), ghi **`id`** trả về.
 - **POST** `{{base_url}}/products` — `categoryId` = `id` danh mục vừa tạo; bắt buộc `name`, `categoryId` (hoặc `category_id`), `price`.
 
-**Lưu ý:** `POST /products` và `POST /categories` hiện **không** bắt `checkLogin` — chỉ dùng môi trường dev; production nên bảo vệ admin.
+**Lưu ý:** `POST /products` và `POST /categories` yêu cầu `checkLogin` + role `ADMIN`.
 
 **Đọc catalog (public)**
 
@@ -106,6 +106,7 @@ Tóm tắt:
 | GET | `{{base_url}}/products/featured` | Sản phẩm `featured: true` |
 | GET | `{{base_url}}/products/<id>` | `id` số |
 | GET | `{{base_url}}/products/slug/<slug>` | Theo slug sản phẩm |
+| POST | `{{base_url}}/products/<id>/fetch-specs` | Public; enrich lại specifications cho sản phẩm |
 
 ### 5.3 Đăng ký / đăng nhập
 
@@ -132,7 +133,22 @@ Mật khẩu mạnh: tối thiểu 8 ký tự, có chữ hoa, chữ thường, s
 
 Legacy (vẫn hoạt động): `POST /cart`, `PUT /cart/:itemId`, `DELETE /cart/:itemId` — xem `routes/cart.js`.
 
-### 5.6 Đơn hàng (Bearer)
+### 5.6 Upload ảnh admin (Bearer ADMIN/MODERATOR)
+
+- **POST** `{{base_url}}/uploads/presign` — body:
+
+```json
+{
+  "scope": "product",
+  "contentType": "image/jpeg",
+  "fileSize": 45000
+}
+```
+
+- `scope`: `product` hoặc `category`.
+- Trả về `uploadUrl` + `publicUrl`; gọi `PUT` file nhị phân vào `uploadUrl`.
+
+### 5.7 Đơn hàng (Bearer)
 
 Server **chỉ** dùng mảng `items` (`productId` + `quantity`); **tự** tính giá và tổng, **tự** trừ tồn kho trong transaction.
 
@@ -151,7 +167,7 @@ Không cần gửi `totalPrice` / `price` trong từng dòng — gửi sẽ bị
 - **GET** `{{base_url}}/orders`
 - **GET** `{{base_url}}/orders/<id>` — `id` số của đơn
 
-### 5.7 Đổi mật khẩu (Bearer)
+### 5.8 Đổi mật khẩu (Bearer)
 
 **POST** `{{base_url}}/auth/change-password`
 
@@ -163,6 +179,11 @@ Không cần gửi `totalPrice` / `price` trong từng dòng — gửi sẽ bị
 ```
 
 Sau khi đổi, đăng nhập lại với mật khẩu mới. Có route legacy `POST /auth/changepassword` (body `oldpassword` / `newpassword`).
+
+### 5.9 Đăng xuất (Bearer)
+
+- **POST** `{{base_url}}/auth/logout`
+- Server xóa cookie auth; client cũng nên xóa token local.
 
 ---
 
@@ -191,6 +212,7 @@ Dữ liệu seed trong Postman nên **trùng tên danh mục / tên sản phẩm
 | Lọc sai danh mục | Dùng query `?category=<id_số>`, không nhầm với tên field body `categoryId`. |
 | Cart / Orders lỗi sản phẩm | `productId` khớp `id` trong DB; đủ `stock`. |
 | Trùng slug danh mục | `409` `DUPLICATE_SLUG` — đổi `name` hoặc xóa bản ghi cũ (dev). |
+| `403` khi tạo category/product | Tài khoản không có role `ADMIN` hoặc thiếu bearer token. |
 
 ---
 

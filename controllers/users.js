@@ -17,15 +17,15 @@ module.exports = {
         return await User.findByIdWithPassword(id);
     },
 
-    async GetAllUser() {
-        return await User.find();
+    async GetAllUser(conditions) {
+        return await User.find(conditions);
     },
 
     async UpdateUser(id, data) {
         return await User.update(id, data);
     },
 
-    async DeleteUser(id) {
-        return await User.delete(id);
+    async DeleteUser(id, deletedBy) {
+        return await User.delete(id, deletedBy);
     }
 };

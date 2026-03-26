@@ -14,7 +14,12 @@ const userSchema = new mongoose.Schema(
         date_of_birth: Date,
         default_address: String,
         avatar_url: String,
-        role: { type: String, enum: ['USER', 'ADMIN', 'MODERATOR'], default: 'USER' }
+        role: { type: String, enum: ['USER', 'ADMIN', 'MODERATOR'], default: 'USER' },
+        status: { type: Boolean, default: true, index: true },
+        loginCount: { type: Number, default: 0 },
+        isDeleted: { type: Boolean, default: false, index: true },
+        deletedAt: { type: Date, default: null },
+        deletedBy: { type: Number, default: null }
     },
     { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
@@ -30,7 +35,10 @@ function stripDoc(doc) {
 
 const User = {
     async findById(id) {
-        const doc = await UserModel.findOne({ id: Number(id) }).select('-password_hash').lean();
+        const doc = await UserModel.findOne({
+            id: Number(id),
+            $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }]
+        }).select('-password_hash').lean();
         return stripDoc(doc);
     },
 
@@ -44,12 +52,22 @@ const User = {
         if (c.email) {
             c.email = String(c.email).toLowerCase().trim();
         }
+        if (c.includeDeleted !== true) {
+            c.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
+        }
+        delete c.includeDeleted;
         const doc = await UserModel.findOne(c).lean();
         return stripDoc(doc);
     },
 
     async find(conditions = {}) {
-        const docs = await UserModel.find(conditions).select('-password_hash').lean();
+        const q = { ...conditions };
+        const includeDeleted = !!q.includeDeleted;
+        if (q.includeDeleted !== undefined) delete q.includeDeleted;
+        if (!includeDeleted) {
+            q.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
+        }
+        const docs = await UserModel.find(q).select('-password_hash').lean();
         return docs.map(stripDoc);
     },
 
@@ -84,9 +102,13 @@ const User = {
         return plain;
     },
 
-    async delete(id) {
-        const r = await UserModel.deleteOne({ id: Number(id) });
-        return r.deletedCount > 0;
+    async delete(id, deletedBy) {
+        const doc = await UserModel.findOneAndUpdate(
+            { id: Number(id) },
+            { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: deletedBy || null, status: false } },
+            { new: true }
+        ).lean();
+        return !!doc;
     }
 };
 

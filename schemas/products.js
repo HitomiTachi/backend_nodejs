@@ -31,7 +31,9 @@ const productSchema = new mongoose.Schema({
     specifications: String,
     colors: [colorSchema],
     storageOptions: [String],
-    isDeleted: { type: Boolean, default: false }
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Number, default: null }
 });
 
 const ProductModel = mongoose.models.Product || mongoose.model('Product', productSchema);
@@ -174,9 +176,13 @@ const Product = {
         return enrichProduct(doc);
     },
 
-    async delete(id) {
-        const r = await ProductModel.deleteOne({ id: Number(id) });
-        return r.deletedCount > 0;
+    async delete(id, deletedBy) {
+        const doc = await ProductModel.findOneAndUpdate(
+            { id: Number(id) },
+            { $set: { isDeleted: true, deletedAt: new Date(), deletedBy: deletedBy || null } },
+            { new: true }
+        ).lean();
+        return !!doc;
     }
 };
 
