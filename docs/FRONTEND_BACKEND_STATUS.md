@@ -29,7 +29,8 @@
 | Đăng ký / đăng nhập / `GET /auth/me` | **Đã triển khai** — `AuthResponse` `{ token, user }` |
 | Middleware `checkLogin` | **Bearer trước**, cookie `token_login_tungNT` sau |
 | Middleware `CheckPermission` | **Đã active** — kiểm tra role thực thi, trả 403 `ban khong co quyen` khi thiếu quyền |
-| Profile `GET/PUT` | **Đã triển khai** — trả `ProfileDto` camelCase (xem §7) |
+| Profile `GET/PUT` + `POST /profile/avatar/presign` | **Đã triển khai** — avatar qua presigned S3 + URL trong DB (xem §7) |
+| `POST /uploads/presign` | **Đã triển khai** — ảnh catalog (`scope`: `product` \| `category`), **ADMIN/MODERATOR**, cùng bucket/R2 với avatar |
 | Giỏ hàng | **Đã triển khai theo spec chính**: `GET /cart`, `POST/PATCH/DELETE /cart/items`, `PUT /cart` (xem §6) |
 | `POST /auth/change-password` (spec) | **Đã có** — hỗ trợ thêm legacy `/auth/changepassword` |
 | Orders (`GET/POST /orders`, `GET /orders/:id`) | **Đã triển khai** — có ownership check theo user đăng nhập |
@@ -121,6 +122,18 @@ Response map theo camelCase qua DTO:
 - `dateOfBirth`
 - `defaultAddress`
 - `passwordChangedAt`
+- `avatarUrl` — URL `http(s)` tới file trên CDN/S3 (DB `avatar_url`); **không** chấp nhận data URL khi `PUT` (chỉ URL sau upload presigned)
+
+**Upload avatar (Cloudflare R2 / S3-compatible):**
+
+1. `POST /profile/avatar/presign` (Bearer) — body `{ "contentType": "image/jpeg", "fileSize": <bytes> }`  
+   → `{ uploadUrl, publicUrl, method, headers, expiresIn }` (503 `AVATAR_STORAGE_NOT_CONFIGURED` nếu thiếu biến môi trường).
+2. Browser `PUT uploadUrl` thẳng lên R2/S3, header `Content-Type` đúng `headers`.
+3. `PUT /profile` — `{ "avatarUrl": "<publicUrl>" }` (HTTP(S) only; tùy chọn `AVATAR_STRICT_PUBLIC_PREFIX=1` để chỉ URL cùng prefix `PUBLIC_ASSET_BASE_URL`).
+
+Cấu hình: `.env.example`, `utils/r2Env.js`, `utils/objectStoragePresign.js`, `utils/avatarStorage.js` (avatar), `routes/uploads.js` (ảnh sản phẩm/danh mục). **R2:** `docs/R2_CLOUDFLARE_SETUP.md`.
+
+**Upload ảnh admin (sản phẩm):** `POST /uploads/presign` với `{ scope: "product", contentType, fileSize }` → `PUT` lên presigned URL → dùng `publicUrl` trong UI (xem `uploadImageFileToR2` trong `techhome-e-commerce`).
 
 → Frontend không cần adapter snake_case cho endpoint profile hiện tại.
 

@@ -3,6 +3,8 @@ var router = express.Router();
 const { checkLogin } = require('../utils/authHandler');
 const userController = require('../controllers/users');
 const { toProfileDto } = require('../utils/mappers/profileDto');
+const { createAvatarPresignedPut } = require('../utils/avatarStorage');
+const { normalizeAvatarForDb } = require('../utils/avatarUrlPolicy');
 
 function pickProfileUpdate(body) {
     const updateData = {};
@@ -24,6 +26,31 @@ function pickProfileUpdate(body) {
     return updateData;
 }
 
+/** POST /profile/avatar/presign — JSON { contentType, fileSize? } → presigned PUT + publicUrl (CDN). */
+router.post('/avatar/presign', checkLogin, async function (req, res) {
+    try {
+        const userId = req.user.id;
+        const contentType = req.body.contentType !== undefined ? req.body.contentType : req.body.content_type;
+        const fileSizeRaw = req.body.fileSize !== undefined ? req.body.fileSize : req.body.file_size;
+        const fileSize = fileSizeRaw !== undefined && fileSizeRaw !== null ? Number(fileSizeRaw) : undefined;
+
+        const result = await createAvatarPresignedPut({
+            userId,
+            contentType,
+            fileSize
+        });
+        res.json(result);
+    } catch (err) {
+        if (err.code === 'NOT_CONFIGURED') {
+            return res.status(503).json({ message: err.message, code: 'AVATAR_STORAGE_NOT_CONFIGURED' });
+        }
+        if (err.code === 'VALIDATION') {
+            return res.status(400).json({ message: err.message, code: err.message });
+        }
+        res.status(500).json({ message: err.message });
+    }
+});
+
 router.get('/', checkLogin, async function (req, res, next) {
     try {
         const userId = req.user.id;
@@ -41,6 +68,14 @@ router.put('/', checkLogin, async function (req, res, next) {
     try {
         const userId = req.user.id;
         const updateData = pickProfileUpdate(req.body);
+
+        if (updateData.avatar_url !== undefined) {
+            try {
+                updateData.avatar_url = normalizeAvatarForDb(updateData.avatar_url);
+            } catch (e) {
+                return res.status(400).json({ message: e.message, code: e.code || 'VALIDATION' });
+            }
+        }
 
         if (Object.keys(updateData).length > 0) {
             await userController.UpdateUser(userId, updateData);

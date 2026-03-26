@@ -174,6 +174,42 @@ Copy giá trị **`token`** từ response vào biến môi trường Postman `{{
 |------|--------|-----|
 | 4.1.1 | GET | `{{base_url}}/profile` |
 
+### 4.1.2 Presign avatar (upload thẳng lên bucket)
+
+Cần biến môi trường S3 + `PUBLIC_ASSET_BASE_URL` (xem `.env.example`). Nếu chưa cấu hình: **503** `{ "code": "AVATAR_STORAGE_NOT_CONFIGURED" }`.
+
+| Bước | Method | URL | Body |
+|------|--------|-----|------|
+| 4.1.2.1 | POST | `{{base_url}}/profile/avatar/presign` | JSON bên dưới |
+
+```json
+{
+  "contentType": "image/jpeg",
+  "fileSize": 45000
+}
+```
+
+Response: `{ "uploadUrl", "publicUrl", "method": "PUT", "headers": { "Content-Type": "..." }, "expiresIn": 300 }`.  
+Tiếp theo: **PUT** `uploadUrl` với body = file nhị phân và header `Content-Type` trùng `headers`. Cuối cùng **PUT** `/profile` với `"avatarUrl": "<publicUrl>"` (chỉ URL `https://...`, không gửi base64).
+
+### 4.1.3 Presign ảnh admin (sản phẩm / danh mục)
+
+Cần **Bearer** user có role **ADMIN** hoặc **MODERATOR**. Cùng bucket/R2 với avatar; key prefix `products/...` hoặc `categories/...`.
+
+| Bước | Method | URL | Body |
+|------|--------|-----|------|
+| 4.1.3.1 | POST | `{{base_url}}/uploads/presign` | JSON bên dưới |
+
+```json
+{
+  "scope": "product",
+  "contentType": "image/jpeg",
+  "fileSize": 45000
+}
+```
+
+Response giống 4.1.2.1; sau đó **PUT** `uploadUrl` với file nhị phân.
+
 ### 4.2 Cập nhật profile
 
 Chỉ gửi các field cần sửa. Backend chấp nhận camelCase hoặc snake_case tương đương (`dateOfBirth` / `date_of_birth`, v.v.).

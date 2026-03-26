@@ -174,8 +174,15 @@ type AuthResponse = { token: string; user: AuthUserDto };
   dateOfBirth?: string | null;
   defaultAddress?: string | null;
   passwordChangedAt?: string | null;
+  avatarUrl?: string | null; // URL http(s) sau upload — PUT /profile { avatarUrl } (không data URL)
 }
 ```
+
+**Upload ảnh đại diện (presigned, giảm tải app server):**
+
+1. `POST /profile/avatar/presign` — body `{ contentType, fileSize }`; response `{ uploadUrl, publicUrl, method, headers, expiresIn }`.
+2. Client `PUT` file thẳng lên `uploadUrl`.
+3. `PUT /profile` — `{ avatarUrl: publicUrl }`.
 
 ### 5.5 Orders
 
@@ -274,7 +281,7 @@ Các phần sau **chưa** có trong `src/services/backend.ts` — không bắt b
 
 - CRUD sản phẩm / upload ảnh **admin** (UI nhiều chỗ vẫn mock).
 - Voucher / thanh toán cổng thật.
-- `PATCH /profile` hoặc upload avatar (profile hiện mix API + local).
+- Upload avatar: **presigned PUT** → bucket → **`PUT /profile`** chỉ gửi URL (xem §5.4). Multipart qua Node (multer) không bắt buộc khi đã có S3.
 
 Khi thêm endpoint mới, cập nhật **`backend.ts`** + **`types/api.ts`** phía frontend và đồng bộ tài liệu này.
 

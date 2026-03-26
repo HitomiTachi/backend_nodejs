@@ -26,7 +26,8 @@ function toProfileDto(user) {
         gender: user.gender != null ? user.gender : null,
         dateOfBirth: toIsoDateOnly(user.date_of_birth),
         defaultAddress: user.default_address != null ? user.default_address : null,
-        passwordChangedAt: toIsoInstant(user.password_changed_at)
+        passwordChangedAt: toIsoInstant(user.password_changed_at),
+        avatarUrl: user.avatar_url != null && user.avatar_url !== '' ? user.avatar_url : null
     };
 }
 

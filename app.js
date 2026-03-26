@@ -53,8 +53,10 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/profile', require('./routes/profile'));
+app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/v1/cart', require('./routes/cart'));
 app.use('/api/v1/profile', require('./routes/profile'));
+app.use('/api/v1/uploads', require('./routes/uploads'));
 
 app.use(function (req, res, next) {
     next(createError(404));
