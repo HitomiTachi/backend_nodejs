@@ -13,7 +13,7 @@ router.get('/', checkLogin, CheckPermission('ADMIN'), async function (req, res, 
     }
 });
 
-router.get('/:id', async function (req, res, next) {
+router.get('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const result = await userController.FindById(req.params.id);
         if (result) {
@@ -26,7 +26,7 @@ router.get('/:id', async function (req, res, next) {
     }
 });
 
-router.post('/', userCreateValidator, handleResultValidator, async function (req, res, next) {
+router.post('/', checkLogin, CheckPermission('ADMIN'), userCreateValidator, handleResultValidator, async function (req, res, next) {
     try {
         const { name, email, password } = req.body;
         const newItem = await userController.CreateAnUser(name, password, email);
@@ -36,7 +36,7 @@ router.post('/', userCreateValidator, handleResultValidator, async function (req
     }
 });
 
-router.put('/:id', userUpdateValidator, handleResultValidator, async function (req, res, next) {
+router.put('/:id', checkLogin, CheckPermission('ADMIN'), userUpdateValidator, handleResultValidator, async function (req, res, next) {
     try {
         const id = req.params.id;
         const { name, email } = req.body;
@@ -51,7 +51,7 @@ router.put('/:id', userUpdateValidator, handleResultValidator, async function (r
     }
 });
 
-router.delete('/:id', async function (req, res, next) {
+router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const deleted = await userController.DeleteUser(req.params.id);
         if (!deleted) return res.status(404).send({ message: 'id not found' });

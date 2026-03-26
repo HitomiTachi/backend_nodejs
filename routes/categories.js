@@ -3,6 +3,7 @@ var router = express.Router();
 const slugify = require('slugify');
 const Category = require('../schemas/categories');
 const { toCategoryDto } = require('../utils/mappers/catalogDto');
+const { checkLogin, CheckPermission } = require('../utils/authHandler');
 
 function buildCategorySlug(name) {
     return slugify(String(name).trim(), { replacement: '-', lower: true, locale: 'vi' });
@@ -67,7 +68,7 @@ router.get('/:id', async function (req, res, next) {
     }
 });
 
-router.post('/', async function (req, res, next) {
+router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const rawName = req.body && req.body.name;
         const name = typeof rawName === 'string' ? rawName.trim() : '';
@@ -100,7 +101,7 @@ router.post('/', async function (req, res, next) {
     }
 });
 
-router.put('/:id', async function (req, res, next) {
+router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const data = { ...req.body };
         if (data.imageUrl !== undefined) {
@@ -137,7 +138,7 @@ router.put('/:id', async function (req, res, next) {
     }
 });
 
-router.delete('/:id', async function (req, res, next) {
+router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const deleted = await Category.delete(req.params.id);
         if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });

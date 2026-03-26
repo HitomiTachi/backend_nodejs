@@ -3,6 +3,7 @@ var router = express.Router();
 const slugify = require('slugify');
 const Product = require('../schemas/products');
 const { toProductDto } = require('../utils/mappers/catalogDto');
+const { checkLogin, CheckPermission } = require('../utils/authHandler');
 
 function buildCreateUpdatePayload(body) {
     const name = body.name;
@@ -102,7 +103,7 @@ router.get('/:id', async function (req, res, next) {
     }
 });
 
-router.post('/', async function (req, res, next) {
+router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const body = req.body;
         const data = buildCreateUpdatePayload(body);
@@ -119,7 +120,7 @@ router.post('/', async function (req, res, next) {
     }
 });
 
-router.put('/:id', async function (req, res, next) {
+router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const data = buildCreateUpdatePayload(req.body);
         if (data.name) {
@@ -136,7 +137,7 @@ router.put('/:id', async function (req, res, next) {
     }
 });
 
-router.delete('/:id', async function (req, res, next) {
+router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const deleted = await Product.delete(req.params.id);
         if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });
