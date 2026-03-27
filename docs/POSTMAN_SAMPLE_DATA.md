@@ -1,295 +1,203 @@
-# Dữ liệu mẫu test API (Postman) — TechHome Backend
+# Dữ liệu mẫu Postman — khớp `POSTMAN_MANUAL_TEST.md` (mục 4)
 
-Tài liệu này liệt kê **thứ tự gọi API hợp lý** và **body JSON mẫu** khớp backend hiện tại. Base URL mặc định: `http://localhost:8080/api`. Chi tiết chạy server và biến môi trường xem [RUN_AND_TEST_POSTMAN.md](./RUN_AND_TEST_POSTMAN.md).
+Base: `http://localhost:8080` — thay bằng `{{baseUrl}}` trong Postman.  
+Header chung khi có body JSON: `Content-Type: application/json`.  
+Khi cần đăng nhập: `Authorization: Bearer <token>` (sau `POST /api/auth/login`).
 
----
-
-## 0. Chuẩn bị Postman
-
-Tạo Environment (ví dụ `TechHome Local`):
-
-| Biến | Giá trị khởi tạo | Ghi chú |
-|------|------------------|---------|
-| `base_url` | `http://localhost:8080/api` | |
-| `token` | *(để trống)* | Điền sau bước đăng nhập |
-| `idemKey` | *(để trống)* | Dùng cho `reservation` / `sold` idempotency |
-| `categoryId` | *(tuỳ chọn)* | Copy từ response sau khi tạo danh mục |
-| `productId` | *(tuỳ chọn)* | Copy từ response sau khi tạo sản phẩm |
-| `cartLineId` | *(tuỳ chọn)* | Copy từ `GET /cart` — `id` từng dòng |
-| `orderId` | *(tuỳ chọn)* | Copy từ `POST /orders` hoặc `GET /orders` |
-
-**Header dùng chung (request có body JSON):**
-
-- `Content-Type: application/json`
-
-**Request cần đăng nhập:**
-
-- `Authorization: Bearer {{token}}`
+**Biến gợi ý:** `productId`, `categoryId`, `cartItemId` (từ GET cart), `orderId`, `userId`, `roleId`, `inventoryId`, `slug`, `parentSlug`, `idempotencyKey` (chuỗi unique mỗi lần gọi reservation/sold).
 
 ---
 
-## 1. Kiểm tra server đang chạy
+## #1–2 — Root & health
 
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 1.1 | GET | `{{base_url}}/health` | Không |
+**#1 GET /**  
+Không header, không body.
 
-**Kỳ vọng:** `200`, ví dụ `{"status":"ok"}`.
+**#2 GET /api/health**  
+Không header, không body.
 
 ---
 
-## 2. Seed dữ liệu catalog (khi DB trống hoặc cần thêm mẫu)
+## #3–10 — Auth
 
-Cần token `ADMIN`. Thực hiện **theo thứ tự**: đăng nhập user admin trước, rồi tạo danh mục, lấy `id` → tạo sản phẩm với `categoryId` đúng.
-
-### 2.1 Tạo danh mục
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 2.1.1 | POST | `{{base_url}}/categories` | JSON bên dưới |
+**#3 POST /api/auth/register**
 
 ```json
 {
-  "name": "Điện thoại",
-  "icon": "smartphone"
+  "email": "demo.user@example.com",
+  "name": "Người dùng demo",
+  "password": "Aa1!aaaa"
 }
 ```
 
-**Tuỳ chọn — danh mục thứ hai:**
+**#4 POST /api/auth/login**
 
 ```json
 {
-  "name": "Phụ kiện",
-  "icon": "headphones"
+  "email": "demo.user@example.com",
+  "password": "Aa1!aaaa"
 }
 ```
 
-Sau mỗi lần tạo, ghi **`id`** trong response (ví dụ `1`) — dùng cho bước sản phẩm.
-Yêu cầu header: `Authorization: Bearer {{token}}` (role `ADMIN`).
+Hoặc: `"username": "demo.user@example.com"` thay cho `email`.
 
-**Trùng danh mục (slug):** `slug` được sinh từ `name` (chuẩn hoá, không dấu). Hai danh mục **không** được cùng `slug`. Nếu `POST /categories` hoặc `PUT /categories/:id` (khi đổi `name`) dẫn tới slug đã tồn tại ở bản ghi khác, API trả **`409`** với `{ "message": "DUPLICATE_SLUG" }`. Tên rỗng / không tạo được slug hợp lệ: **`400`** (`NAME_REQUIRED` hoặc `INVALID_SLUG`).
+**#5 GET /api/auth/me**  
+Bearer: `Authorization: Bearer {{token}}`
 
-### 2.2 Tạo sản phẩm
-
-Thay `categoryId` bằng `id` danh mục thực tế (ví dụ `1`).
-Yêu cầu header: `Authorization: Bearer {{token}}` (role `ADMIN`).
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 2.2.1 | POST | `{{base_url}}/products` | JSON bên dưới |
+**#6 POST /api/auth/change-password**  
+Bearer.
 
 ```json
 {
-  "name": "iPhone 15 Pro",
+  "currentPassword": "Aa1!aaaa",
+  "newPassword": "Bb2@bbbb"
+}
+```
+
+**#7 POST /api/auth/changepassword** (legacy)  
+Bearer.
+
+```json
+{
+  "oldpassword": "Bb2@bbbb",
+  "newpassword": "Cc3@cccc"
+}
+```
+
+**#8 POST /api/auth/logout**  
+Bearer — không body.
+
+**#9 POST /api/auth/forgotpassword**
+
+```json
+{
+  "email": "demo.user@example.com"
+}
+```
+
+**#10 POST /api/auth/resetpassword/any-token-here**  
+Không body (hoặc tùy — server trả 501).
+
+---
+
+## #11–18 — Products
+
+**#11 GET /api/products**  
+Query mẫu:
+
+```
+/api/products?category=1&q=iphone&page=1&size=10
+```
+
+**#12 GET /api/products/featured** — không query.
+
+**#13 GET /api/products/slug/dien-thoai-mau**  
+Đổi `dien-thoai-mau` bằng slug thật trong DB.
+
+**#14 POST /api/products/1/fetch-specs**
+
+```json
+{}
+```
+
+**#15 GET /api/products/1** — đổi `1` thành `productId`.
+
+**#16 POST /api/products** (ADMIN)
+
+```json
+{
+  "name": "Điện thoại mẫu X",
   "categoryId": 1,
-  "price": 25990000,
-  "salePrice": 24990000,
-  "stock": 50,
-  "featured": true,
-  "description": "Điện thoại mẫu test",
-  "image": "https://picsum.photos/seed/iphone15/400/400",
-  "images": ["https://picsum.photos/seed/iphone15a/400/400"],
-  "colors": [{ "name": "Titan tự nhiên", "hex": "#3d3d3d" }],
-  "storageOptions": ["128GB", "256GB"]
+  "price": 15990000,
+  "description": "Mô tả ngắn",
+  "image": "https://example.com/p.jpg",
+  "sku": "SKU-DEMO-001",
+  "stock": 50
 }
 ```
 
-**Sản phẩm mẫu thứ hai (tuỳ chọn):**
+**#17 PUT /api/products/1** (ADMIN)
 
 ```json
 {
-  "name": "Samsung Galaxy S24",
-  "categoryId": 1,
-  "price": 18990000,
-  "salePrice": 17990000,
-  "stock": 30,
-  "featured": false,
-  "description": "Mẫu test thứ hai",
-  "image": "https://picsum.photos/seed/s24/400/400",
-  "colors": [{ "name": "Đen", "hex": "#111111" }],
-  "storageOptions": ["256GB"]
+  "name": "Tên sản phẩm cập nhật",
+  "price": 14990000,
+  "stock": 40
 }
 ```
 
-Ghi **`id`** sản phẩm để dùng cho giỏ hàng và đơn hàng.
-
-### 2.3 Đọc catalog (public, không token)
-
-| Bước | Method | URL |
-|------|--------|-----|
-| 2.3.1 | GET | `{{base_url}}/categories` |
-| 2.3.2 | GET | `{{base_url}}/products?page=0&size=20` |
-| 2.3.3 | GET | `{{base_url}}/products/featured` |
-| 2.3.4 | GET | `{{base_url}}/products/1` |
-| 2.3.5 | POST | `{{base_url}}/products/1/fetch-specs` |
-
-Ở bước 2.3.4, thay `1` bằng `id` sản phẩm thật từ DB.
+**#18 DELETE /api/products/1** (ADMIN) — không body.
 
 ---
 
-## 3. Đăng ký và đăng nhập
+## #19–26 — Categories
 
-Mật khẩu phải **mạnh**: tối thiểu 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt.
+**#19 GET /api/categories**  
+Query mẫu:
 
-### 3.1 Đăng ký
+```
+/api/categories?parentId=null&includeDeleted=false&name=
+```
 
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 3.1.1 | POST | `{{base_url}}/auth/register` | JSON bên dưới |
+Hoặc lọc con theo cha: `?parentId=1`
+
+**#20 GET /api/categories/1/products**
+
+**#21 GET /api/categories/slug/dien-thoai**
+
+**#22 GET /api/categories/children/slug/dien-thoai**
+
+**#23 GET /api/categories/1?includeDeleted=false**
+
+**#24 POST /api/categories** (ADMIN)
 
 ```json
 {
-  "name": "Nguyen Van Test",
-  "email": "testuser@local.dev",
-  "password": "Demo@1234"
+  "name": "Danh mục demo",
+  "icon": "phone",
+  "imageUrl": "https://example.com/cat.jpg",
+  "parentId": null
 }
 ```
 
-Nếu email đã tồn tại, dùng email khác hoặc chuyển sang đăng nhập.
-
-### 3.2 Đăng nhập
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 3.2.1 | POST | `{{base_url}}/auth/login` | JSON bên dưới |
+**#25 PUT /api/categories/1** (ADMIN)
 
 ```json
 {
-  "email": "testuser@local.dev",
-  "password": "Demo@1234"
+  "name": "Tên danh mục mới",
+  "imageUrl": null
 }
 ```
 
-Copy giá trị **`token`** từ response vào biến môi trường Postman `{{token}}`.
-
-### 3.3 Xác nhận phiên (Bearer)
-
-| Bước | Method | URL | Header |
-|------|--------|-----|--------|
-| 3.3.1 | GET | `{{base_url}}/auth/me` | `Authorization: Bearer {{token}}` |
+**#26 DELETE /api/categories/1** (ADMIN) — không body.
 
 ---
 
-## 4. Profile (Bearer)
+## #27–34 — Cart (Bearer user)
 
-### 4.1 Lấy profile
+**#27 GET /api/cart**
 
-| Bước | Method | URL |
-|------|--------|-----|
-| 4.1.1 | GET | `{{base_url}}/profile` |
-
-### 4.1.2 Presign avatar (upload thẳng lên bucket)
-
-Cần biến môi trường S3 + `PUBLIC_ASSET_BASE_URL` (xem `.env.example`). Nếu chưa cấu hình: **503** `{ "code": "AVATAR_STORAGE_NOT_CONFIGURED" }`.
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 4.1.2.1 | POST | `{{base_url}}/profile/avatar/presign` | JSON bên dưới |
+**#28 PUT /api/cart**
 
 ```json
 {
-  "contentType": "image/jpeg",
-  "fileSize": 45000
+  "items": [
+    { "productId": 1, "quantity": 2, "variant": null }
+  ]
 }
 ```
 
-Response: `{ "uploadUrl", "publicUrl", "method": "PUT", "headers": { "Content-Type": "..." }, "expiresIn": 300 }`.  
-Tiếp theo: **PUT** `uploadUrl` với body = file nhị phân và header `Content-Type` trùng `headers`. Cuối cùng **PUT** `/profile` với `"avatarUrl": "<publicUrl>"` (chỉ URL `https://...`, không gửi base64).
-
-### 4.1.3 Presign ảnh admin (sản phẩm / danh mục)
-
-Cần **Bearer** user có role **ADMIN** hoặc **MODERATOR**. Cùng bucket/R2 với avatar; key prefix `products/...` hoặc `categories/...`.
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 4.1.3.1 | POST | `{{base_url}}/uploads/presign` | JSON bên dưới |
-
-```json
-{
-  "scope": "product",
-  "contentType": "image/jpeg",
-  "fileSize": 45000
-}
-```
-
-Response giống 4.1.2.1; sau đó **PUT** `uploadUrl` với file nhị phân.
-
-### 4.2 Cập nhật profile
-
-Chỉ gửi các field cần sửa. Backend chấp nhận camelCase hoặc snake_case tương đương (`dateOfBirth` / `date_of_birth`, v.v.).
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 4.2.1 | PUT | `{{base_url}}/profile` | JSON bên dưới |
-
-```json
-{
-  "name": "Nguyen Van Test",
-  "phone": "0909123456",
-  "gender": "male",
-  "dateOfBirth": "1995-06-15",
-  "defaultAddress": "123 Đường ABC, Quận 1, TP.HCM",
-  "avatarUrl": "https://picsum.photos/seed/avatar/200/200"
-}
-```
-
----
-
-## 5. Giỏ hàng (Bearer)
-
-`productId` phải trùng **id số** sản phẩm trong DB. Có thể gửi dạng số hoặc chuỗi số.
-
-### 5.1 Thêm sản phẩm vào giỏ
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 5.1.1 | POST | `{{base_url}}/cart/items` | JSON bên dưới |
-
-```json
-{
-  "productId": 1,
-  "quantity": 2
-}
-```
-
-**Có variant (tuỳ chọn):**
+**#29 POST /api/cart/items**
 
 ```json
 {
   "productId": 1,
   "quantity": 1,
-  "variant": "256GB"
+  "variant": null
 }
 ```
 
-### 5.2 Xem giỏ
-
-| Bước | Method | URL |
-|------|--------|-----|
-| 5.2.1 | GET | `{{base_url}}/cart` |
-
-Ghi **`id`** của từng dòng để dùng cho PATCH/DELETE.
-
-### 5.3 Thay toàn bộ giỏ (tuỳ chọn)
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 5.3.1 | PUT | `{{base_url}}/cart` | JSON bên dưới |
-
-```json
-{
-  "items": [
-    { "productId": 1, "quantity": 2 },
-    { "productId": 2, "quantity": 1 }
-  ]
-}
-```
-
-### 5.4 Sửa số lượng một dòng
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 5.4.1 | PATCH | `{{base_url}}/cart/items/{{cartLineId}}` | JSON bên dưới |
+**#30 PATCH /api/cart/items/:cartItemId**
 
 ```json
 {
@@ -297,157 +205,220 @@ Ghi **`id`** của từng dòng để dùng cho PATCH/DELETE.
 }
 ```
 
-### 5.5 Xóa một dòng
+**#31 DELETE /api/cart/items/:cartItemId** — không body.
 
-| Bước | Method | URL |
-|------|--------|-----|
-| 5.5.1 | DELETE | `{{base_url}}/cart/items/{{cartLineId}}` |
-
----
-
-## 6. Đơn hàng (Bearer)
-
-Server **tự tính giá và tổng** từ DB; body chỉ cần mảng `items` với `productId` và `quantity` hợp lệ.
-
-### 6.1 Tạo đơn
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 6.1.1 | POST | `{{base_url}}/orders` | JSON bên dưới |
+**#32 POST /api/cart** (legacy)
 
 ```json
 {
-  "items": [
-    { "productId": 1, "quantity": 1 },
-    { "productId": 2, "quantity": 2 }
-  ]
-}
-```
-
-**Một dòng tối thiểu:**
-
-```json
-{
-  "items": [{ "productId": 1, "quantity": 1 }]
-}
-```
-
-### 6.2 Danh sách đơn và chi tiết
-
-| Bước | Method | URL |
-|------|--------|-----|
-| 6.2.1 | GET | `{{base_url}}/orders` |
-| 6.2.2 | GET | `{{base_url}}/orders/{{orderId}}` |
-
----
-
-## 7. Đổi mật khẩu (Bearer)
-
-Thực hiện **sau** khi đã login; `newPassword` cũng phải đạt chuẩn mật khẩu mạnh như đăng ký.
-
-| Bước | Method | URL | Body |
-|------|--------|-----|------|
-| 7.1 | POST | `{{base_url}}/auth/change-password` | JSON bên dưới |
-
-```json
-{
-  "currentPassword": "Demo@1234",
-  "newPassword": "NewDemo@5678"
-}
-```
-
-Sau khi đổi thành công, các request tiếp theo cần đăng nhập lại với `newPassword`.
-
-**Lưu ý:** Còn route legacy `POST /auth/changepassword` với body `oldpassword` / `newpassword` nếu cần tương thích cũ.
-
----
-
-## 8. Inventory idempotency (ADMIN)
-
-Ap dung cho 2 endpoint:
-
-- `POST /inventories/reservation`
-- `POST /inventories/sold`
-
-Can header:
-
-- `Authorization: Bearer {{token}}`
-- `Idempotency-Key: {{idemKey}}`
-
-### 8.1 Add stock truoc khi reservation
-
-```json
-{
-  "product": {{productId}},
-  "quantity": 10
-}
-```
-
-Request: `POST {{base_url}}/inventories/add-stock`
-
-### 8.2 Reservation voi idempotency key
-
-```json
-{
-  "product": {{productId}},
-  "quantity": 2
-}
-```
-
-Request: `POST {{base_url}}/inventories/reservation`
-
-Test:
-
-1. Gui lan 1 voi `Idempotency-Key: reserve-001`
-2. Gui lai lan 2 cung body + cung key `reserve-001`
-3. Ky vong lan 2 tra them `idempotentReplay: true`, khong tru stock lan nua
-
-### 8.3 Sold voi idempotency key
-
-```json
-{
-  "product": {{productId}},
+  "product_id": 1,
   "quantity": 1
 }
 ```
 
-Request: `POST {{base_url}}/inventories/sold`  
-Header: `Idempotency-Key: sold-001`
+**#33 PUT /api/cart/:cartItemId** (legacy)
 
-### 8.4 Kiem tra idempotency record
+```json
+{
+  "quantity": 2
+}
+```
 
-- `GET {{base_url}}/inventories/idempotency/reservation/reserve-001`
-- `GET {{base_url}}/inventories/idempotency/sold/sold-001`
-
-Ky vong response co cac field `status`, `product`, `quantity`, `response`.
-
----
-
-## Tóm tắt thứ tự gợi ý
-
-1. **Health** → **Register/Login admin** → lưu **token**  
-2. **Categories + Products** (seed) → đọc **GET** catalog  
-3. (Tuỳ chọn) **Register user thường** → **Login** → **GET /auth/me**  
-4. **GET/PUT profile**  
-5. **POST cart/items** → **GET cart** → (tuỳ chọn) **PATCH/DELETE** dòng  
-6. **POST orders** → **GET orders** / **GET orders/:id**  
-7. **POST change-password** (và login lại nếu cần tiếp tục test)  
-8. **POST inventories/reservation + sold** với `Idempotency-Key`, sau đó GET idempotency record
+**#34 DELETE /api/cart/:cartItemId** (legacy) — không body.
 
 ---
 
-## Lưu ý
+## #35–37 — Orders (Bearer user)
 
-- `id` category/product phụ thuộc DB; luôn lấy từ **response** hoặc **GET** list, không giả định cố định là `1` nếu đã có dữ liệu cũ.
-- Đặt hàng sẽ **trừ tồn kho**; lỗi thường gặp: `productId` sai, không đủ `stock`.
-- `POST /products` và `POST /categories` yêu cầu role `ADMIN`; token thường sẽ nhận `403`.
-- **Danh mục:** MongoDB có **unique index** trên `slug`. Nếu DB cũ đã có nhiều document trùng `slug`, cần gộp/xoá trùng hoặc đổi slug thủ công trước khi tạo index (hoặc drop collection trong dev).
+**#35 GET /api/orders**
+
+**#36 GET /api/orders/1** — `1` = id đơn (số).
+
+**#37 POST /api/orders**
+
+```json
+{
+  "items": [
+    { "productId": 1, "quantity": 1 }
+  ]
+}
+```
 
 ---
 
-## Tài liệu liên quan
+## #38–40 — Profile (Bearer user)
 
-| File | Nội dung |
-|------|----------|
-| [RUN_AND_TEST_POSTMAN.md](./RUN_AND_TEST_POSTMAN.md) | Chạy backend, JWT, Postman cơ bản |
-| [TECHHOME_BACKEND_API_SPEC.md](./TECHHOME_BACKEND_API_SPEC.md) | Contract API đầy đủ |
+**#38 POST /api/profile/avatar/presign**
+
+```json
+{
+  "contentType": "image/jpeg",
+  "fileSize": 204800
+}
+```
+
+**#39 GET /api/profile**
+
+**#40 PUT /api/profile**
+
+```json
+{
+  "name": "Tên hiển thị",
+  "phone": "0912345678",
+  "gender": "male",
+  "dateOfBirth": "1995-06-15",
+  "defaultAddress": "123 Đường ABC, Quận 1, TP.HCM",
+  "avatarUrl": "https://cdn.example.com/u/avatar.jpg"
+}
+```
+
+---
+
+## #41 — Uploads (ADMIN hoặc MODERATOR)
+
+**POST /api/uploads/presign**
+
+```json
+{
+  "scope": "product",
+  "contentType": "image/png",
+  "fileSize": 300000
+}
+```
+
+`scope` còn có giá trị: `"category"`.
+
+---
+
+## #42–48 — Users (ADMIN)
+
+**#42 GET /api/users?includeDeleted=false**
+
+**#43 GET /api/users/1**
+
+**#44 POST /api/users**
+
+```json
+{
+  "name": "Nhân viên A",
+  "email": "staff@example.com",
+  "password": "Bb2@bbbb"
+}
+```
+
+**#45 PUT /api/users/1**
+
+```json
+{
+  "name": "Tên cập nhật",
+  "email": "staff@example.com",
+  "status": true,
+  "loginCount": 0,
+  "role": "USER"
+}
+```
+
+**#46 POST /api/users/enable**
+
+```json
+{
+  "email": "staff@example.com"
+}
+```
+
+**#47 POST /api/users/disable**
+
+```json
+{
+  "email": "staff@example.com"
+}
+```
+
+**#48 DELETE /api/users/1** — không body.
+
+---
+
+## #49–53 — Roles (ADMIN)
+
+**#49 GET /api/roles?includeDeleted=false**
+
+**#50 GET /api/roles/1?includeDeleted=false**
+
+**#51 POST /api/roles**
+
+```json
+{
+  "name": "CUSTOM_ROLE",
+  "description": "Vai trò demo"
+}
+```
+
+**#52 PUT /api/roles/1**
+
+```json
+{
+  "name": "CUSTOM_ROLE",
+  "description": "Mô tả đã sửa"
+}
+```
+
+**#53 DELETE /api/roles/1** — không body.
+
+---
+
+## #54–60 — Inventories (ADMIN)
+
+**#54 GET /api/inventories**
+
+**#55 GET /api/inventories/1** — `1` = id bản ghi inventory.
+
+**#56 GET /api/inventories/idempotency/reservation/my-key-001**  
+`action` = `reservation` hoặc `sold`; `key` = giá trị Idempotency-Key đã dùng.
+
+**#57 POST /api/inventories/add-stock**
+
+```json
+{
+  "product": 1,
+  "quantity": 10
+}
+```
+
+**#58 POST /api/inventories/remove-stock**
+
+```json
+{
+  "product": 1,
+  "quantity": 2
+}
+```
+
+**#59 POST /api/inventories/reservation**  
+Header bắt buộc: `Idempotency-Key: my-reservation-key-001` (unique mỗi lần gọi mới).
+
+```json
+{
+  "product": 1,
+  "quantity": 1
+}
+```
+
+Có thể thêm trong body: `"idempotencyKey": "my-reservation-key-001"` (server cũng đọc).
+
+**#60 POST /api/inventories/sold**  
+Header: `Idempotency-Key: my-sold-key-001` (khác key với reservation).
+
+```json
+{
+  "product": 1,
+  "quantity": 1
+}
+```
+
+---
+
+## Ghi chú
+
+- `productId` / `categoryId` / … phải **tồn tại trong MongoDB** của bạn; số `1` chỉ là ví dụ.
+- Mật khẩu mẫu `Aa1!aaaa`, `Bb2@bbbb`… thỏa rule `isStrongPassword` của backend.
+- File này bổ sung cho **mục 4 và 6** trong `POSTMAN_MANUAL_TEST.md`; import collection `TechHome_Backend.postman_collection.json` để có sẵn request.
