@@ -52,6 +52,8 @@ function toProductDto(row) {
     if (row.colors && row.colors.length) dto.colors = row.colors;
     const storage = row.storageOptions || row.storage_options;
     if (storage && storage.length) dto.storageOptions = storage;
+    if (row.sku != null && String(row.sku).trim() !== '') dto.sku = row.sku;
+    if (row.tag != null && String(row.tag).trim() !== '') dto.tag = row.tag;
 
     return dto;
 }
