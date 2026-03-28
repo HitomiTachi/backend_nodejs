@@ -9,6 +9,10 @@ module.exports = {
         return await User.findOne({ email });
     },
 
+    async FindByPasswordResetHash(tokenHash) {
+        return await User.findByPasswordResetHash(tokenHash);
+    },
+
     async FindById(id) {
         return await User.findById(id);
     },
