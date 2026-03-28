@@ -1,0 +1,585 @@
+{
+  "info": {
+    "name": "TechHome backend_nodejs — full API",
+    "description": "Base: {{baseUrl}}. Mirror: thay /api → /api/v1. Auth: Bearer {{token}} hoặc cookie token_login_tungNT.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "token", "value": "" },
+    { "key": "productId", "value": "1" },
+    { "key": "categoryId", "value": "1" },
+    { "key": "orderId", "value": "1" },
+    { "key": "cartItemId", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "roleId", "value": "1" },
+    { "key": "inventoryId", "value": "1" },
+    { "key": "slug", "value": "iphone-15" },
+    { "key": "parentSlug", "value": "dien-thoai" },
+    { "key": "idempotencyKey", "value": "test-key-001" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "00 Root & health",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/"
+          }
+        },
+        {
+          "name": "GET /api/health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"name\": \"Test\",\n  \"password\": \"Aa1!aaaa\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Aa1!aaaa\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "GET /api/auth/me",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/auth/me" }
+        },
+        {
+          "name": "POST /api/auth/change-password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Aa1!aaaa\",\n  \"newPassword\": \"Bb2@bbbb\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/change-password"
+          }
+        },
+        {
+          "name": "POST /api/auth/changepassword (legacy)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldpassword\": \"Aa1!aaaa\",\n  \"newpassword\": \"Bb2@bbbb\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/changepassword"
+          }
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": { "method": "POST", "header": [], "url": "{{baseUrl}}/api/auth/logout" }
+        },
+        {
+          "name": "POST /api/auth/forgotpassword",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" },
+            "url": "{{baseUrl}}/api/auth/forgotpassword"
+          }
+        },
+        {
+          "name": "POST /api/auth/resetpassword/:token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/resetpassword/placeholder-token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Products",
+      "item": [
+        {
+          "name": "GET /api/products",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products?category=&q=&page=&size="
+          }
+        },
+        {
+          "name": "GET /api/products/featured",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products/featured"
+          }
+        },
+        {
+          "name": "GET /api/products/slug/:slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products/slug/{{slug}}"
+          }
+        },
+        {
+          "name": "POST /api/products/:id/fetch-specs",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{baseUrl}}/api/products/{{productId}}/fetch-specs"
+          }
+        },
+        {
+          "name": "GET /api/products/:id",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/products/{{productId}}"
+          }
+        },
+        {
+          "name": "POST /api/products",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"SP mẫu\",\n  \"categoryId\": 1,\n  \"price\": 10000000,\n  \"stock\": 10\n}"
+            },
+            "url": "{{baseUrl}}/api/products"
+          }
+        },
+        {
+          "name": "PUT /api/products/:id",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Tên mới\",\n  \"price\": 9990000\n}" },
+            "url": "{{baseUrl}}/api/products/{{productId}}"
+          }
+        },
+        {
+          "name": "DELETE /api/products/:id",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/products/{{productId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Categories",
+      "item": [
+        {
+          "name": "GET /api/categories",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories?parentId=&includeDeleted=&name="
+          }
+        },
+        {
+          "name": "GET /api/categories/:id/products",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories/{{categoryId}}/products"
+          }
+        },
+        {
+          "name": "GET /api/categories/slug/:slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories/slug/{{slug}}"
+          }
+        },
+        {
+          "name": "GET /api/categories/children/slug/:slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories/children/slug/{{parentSlug}}"
+          }
+        },
+        {
+          "name": "GET /api/categories/:id",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories/{{categoryId}}?includeDeleted=false"
+          }
+        },
+        {
+          "name": "POST /api/categories",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Danh mục mới\",\n  \"icon\": \"\",\n  \"imageUrl\": null,\n  \"parentId\": null\n}"
+            },
+            "url": "{{baseUrl}}/api/categories"
+          }
+        },
+        {
+          "name": "PUT /api/categories/:id",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Tên cập nhật\"\n}" },
+            "url": "{{baseUrl}}/api/categories/{{categoryId}}"
+          }
+        },
+        {
+          "name": "DELETE /api/categories/:id",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/categories/{{categoryId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Cart",
+      "item": [
+        {
+          "name": "GET /api/cart",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/cart" }
+        },
+        {
+          "name": "PUT /api/cart",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [{ \"productId\": 1, \"quantity\": 1, \"variant\": null }]\n}"
+            },
+            "url": "{{baseUrl}}/api/cart"
+          }
+        },
+        {
+          "name": "POST /api/cart/items",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": 1,\n  \"quantity\": 1,\n  \"variant\": null\n}"
+            },
+            "url": "{{baseUrl}}/api/cart/items"
+          }
+        },
+        {
+          "name": "PATCH /api/cart/items/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
+            "url": "{{baseUrl}}/api/cart/items/{{cartItemId}}"
+          }
+        },
+        {
+          "name": "DELETE /api/cart/items/:id",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/cart/items/{{cartItemId}}" }
+        },
+        {
+          "name": "POST /api/cart (legacy)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 1\n}"
+            },
+            "url": "{{baseUrl}}/api/cart"
+          }
+        },
+        {
+          "name": "PUT /api/cart/:itemId (legacy)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
+            "url": "{{baseUrl}}/api/cart/{{cartItemId}}"
+          }
+        },
+        {
+          "name": "DELETE /api/cart/:itemId (legacy)",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/cart/{{cartItemId}}" }
+        }
+      ]
+    },
+    {
+      "name": "05 Orders",
+      "item": [
+        {
+          "name": "GET /api/orders",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/orders" }
+        },
+        {
+          "name": "GET /api/orders/:id",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/orders/{{orderId}}" }
+        },
+        {
+          "name": "POST /api/orders",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [{ \"productId\": 1, \"quantity\": 1 }]\n}"
+            },
+            "url": "{{baseUrl}}/api/orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Profile",
+      "item": [
+        {
+          "name": "POST /api/profile/avatar/presign",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentType\": \"image/jpeg\",\n  \"fileSize\": 102400\n}"
+            },
+            "url": "{{baseUrl}}/api/profile/avatar/presign"
+          }
+        },
+        {
+          "name": "GET /api/profile",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/profile" }
+        },
+        {
+          "name": "PUT /api/profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tên\",\n  \"phone\": \"0900000000\",\n  \"gender\": \"male\",\n  \"dateOfBirth\": \"1990-01-15\",\n  \"defaultAddress\": \"Địa chỉ\"\n}"
+            },
+            "url": "{{baseUrl}}/api/profile"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Uploads",
+      "item": [
+        {
+          "name": "POST /api/uploads/presign",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"product\",\n  \"contentType\": \"image/jpeg\",\n  \"fileSize\": 500000\n}"
+            },
+            "url": "{{baseUrl}}/api/uploads/presign"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Users (ADMIN)",
+      "item": [
+        {
+          "name": "GET /api/users",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/users?includeDeleted=false" }
+        },
+        {
+          "name": "GET /api/users/:id",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/users/{{userId}}" }
+        },
+        {
+          "name": "POST /api/users",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"User mới\",\n  \"email\": \"new@example.com\",\n  \"password\": \"Aa1!aaaa\"\n}"
+            },
+            "url": "{{baseUrl}}/api/users"
+          }
+        },
+        {
+          "name": "PUT /api/users/:id",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Đổi tên\",\n  \"email\": \"user@example.com\",\n  \"status\": true,\n  \"role\": \"USER\"\n}"
+            },
+            "url": "{{baseUrl}}/api/users/{{userId}}"
+          }
+        },
+        {
+          "name": "POST /api/users/enable",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" },
+            "url": "{{baseUrl}}/api/users/enable"
+          }
+        },
+        {
+          "name": "POST /api/users/disable",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@example.com\"\n}" },
+            "url": "{{baseUrl}}/api/users/disable"
+          }
+        },
+        {
+          "name": "DELETE /api/users/:id",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/users/{{userId}}" }
+        }
+      ]
+    },
+    {
+      "name": "09 Roles (ADMIN)",
+      "item": [
+        {
+          "name": "GET /api/roles",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/roles?includeDeleted=false" }
+        },
+        {
+          "name": "GET /api/roles/:id",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/roles/{{roleId}}?includeDeleted=false" }
+        },
+        {
+          "name": "POST /api/roles",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"CUSTOM_ROLE\",\n  \"description\": \"Mô tả\"\n}"
+            },
+            "url": "{{baseUrl}}/api/roles"
+          }
+        },
+        {
+          "name": "PUT /api/roles/:id",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"CUSTOM_ROLE\",\n  \"description\": \"Sửa\"\n}" },
+            "url": "{{baseUrl}}/api/roles/{{roleId}}"
+          }
+        },
+        {
+          "name": "DELETE /api/roles/:id",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/roles/{{roleId}}" }
+        }
+      ]
+    },
+    {
+      "name": "10 Inventories (ADMIN)",
+      "item": [
+        {
+          "name": "GET /api/inventories",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/inventories" }
+        },
+        {
+          "name": "GET /api/inventories/:id",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/inventories/{{inventoryId}}" }
+        },
+        {
+          "name": "GET /api/inventories/idempotency/:action/:key",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/inventories/idempotency/reservation/{{idempotencyKey}}"
+          }
+        },
+        {
+          "name": "POST /api/inventories/add-stock",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product\": 1,\n  \"quantity\": 5\n}" },
+            "url": "{{baseUrl}}/api/inventories/add-stock"
+          }
+        },
+        {
+          "name": "POST /api/inventories/remove-stock",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product\": 1,\n  \"quantity\": 2\n}" },
+            "url": "{{baseUrl}}/api/inventories/remove-stock"
+          }
+        },
+        {
+          "name": "POST /api/inventories/reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"product\": 1,\n  \"quantity\": 1\n}" },
+            "url": "{{baseUrl}}/api/inventories/reservation"
+          }
+        },
+        {
+          "name": "POST /api/inventories/sold",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}-sold" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"product\": 1,\n  \"quantity\": 1\n}" },
+            "url": "{{baseUrl}}/api/inventories/sold"
+          }
+        }
+      ]
+    }
+  ]
+}
