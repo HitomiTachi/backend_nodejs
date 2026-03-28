@@ -63,3 +63,4 @@ typings/
 # ĩgnore all private keys and certificates
 keys/
 *.pem
+*.postman_collection.json

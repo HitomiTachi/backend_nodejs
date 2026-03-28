@@ -4,11 +4,11 @@ const nodemailer = require("nodemailer");
 // For production, replace with your actual SMTP server details.
 const transporter = nodemailer.createTransport({
     host: "sandbox.smtp.mailtrap.io",
-    port: 25,
+    port: 2525,
     secure: false, // Use true for port 465, false for port 587
     auth: {
-        user: "",
-        pass: "",
+        user: "399fa711c40ef2",
+        pass: "8b27682241ed11",
     },
 });
 //http://localhost:3000/api/v1/auth/resetpassword/a87edf6812f235e997c7b751422e6b2f5cd95aa994c55ebeeb931ca67214d645
