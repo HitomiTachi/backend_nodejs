@@ -5,6 +5,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const cors = require('cors');
 const { connectDB } = require('./utils/data');
+// chore: placeholder — safe to remove
 
 var app = express();
 
