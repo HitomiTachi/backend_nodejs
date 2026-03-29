@@ -20,7 +20,35 @@ function normalizeRole(value) {
     return String(value).trim().toUpperCase();
 }
 
+/** Đặt req.user nếu có Bearer hợp lệ; không có hoặc lỗi thì req.user = null. */
+async function optionalAuth(req, res, next) {
+    req.user = null;
+    let token = extractBearerToken(req);
+    if (!token && req.cookies && req.cookies.token_login_tungNT) {
+        token = req.cookies.token_login_tungNT;
+    }
+    if (!token) {
+        return next();
+    }
+    try {
+        const result = verifyAuthToken(token);
+        if (result.exp * 1000 <= Date.now()) {
+            return next();
+        }
+        const user = await userController.FindById(result.id);
+        if (user) {
+            req.user = user;
+            req.authPayload = result;
+        }
+        next();
+    } catch {
+        next();
+    }
+}
+
 module.exports = {
+    optionalAuth,
+
     checkLogin: async function (req, res, next) {
         let token = extractBearerToken(req);
         if (!token && req.cookies && req.cookies.token_login_tungNT) {

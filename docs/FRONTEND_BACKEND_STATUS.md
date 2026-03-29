@@ -32,7 +32,7 @@
 | Profile `GET/PUT` + `POST /profile/avatar/presign` | **Đã triển khai** — avatar qua presigned S3 + URL trong DB (xem §7) |
 | `POST /uploads/presign` | **Đã triển khai** — ảnh catalog (`scope`: `product` \| `category`), **ADMIN/MODERATOR**, cùng bucket/R2 với avatar |
 | Giỏ hàng | **Đã triển khai theo spec chính**: `GET /cart`, `POST/PATCH/DELETE /cart/items`, `PUT /cart` (xem §6) |
-| `POST /auth/change-password` (spec) | **Đã có** — hỗ trợ thêm legacy `/auth/changepassword` |
+| `POST /auth/change-password` (spec) | **Đã có** |
 | Orders (`GET/POST /orders`, `GET /orders/:id`) | **Đã triển khai** — có ownership check theo user đăng nhập |
 | Alias route | Mọi nhóm quan trọng mount **cả** `/api/...` **và** `/api/v1/...` (cùng handler) |
 
@@ -65,7 +65,6 @@
 
 | Mô tả | Chi tiết |
 |-------|----------|
-| Đổi mật khẩu legacy | Vẫn giữ **`POST /auth/changepassword`** với body cũ `oldpassword` / `newpassword` để tương thích ngược. |
 | Lỗi validation (register, …) | `handleResultValidator` có thể trả **mảng** chuỗi message (400), không chỉ `{ message: string }`. |
 
 **Khác endpoint thêm (không trong bảng spec §4.1):**

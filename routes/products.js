@@ -46,7 +46,8 @@ router.get('/', async function (req, res, next) {
             categoryId: req.query.category,
             q: req.query.q,
             page: req.query.page,
-            size: req.query.size
+            size: req.query.size,
+            sort: req.query.sort
         });
         res.json(data.map(toProductDto));
     } catch (error) {

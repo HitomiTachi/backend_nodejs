@@ -4,10 +4,11 @@ const userController = require('../controllers/users');
 const {
     RegisterValidator,
     handleResultValidator,
-    ChangPasswordValidator,
     ChangePasswordSpecValidator,
+    ResetPasswordNewValidator,
     handleResultValidatorApi
 } = require('../utils/validatorHandler');
+const { generateResetToken, hashResetToken } = require('../utils/passwordResetToken');
 const bcrypt = require('bcrypt');
 const { checkLogin } = require('../utils/authHandler');
 const { sendMail } = require('../utils/senMailHandler');
@@ -87,8 +88,8 @@ router.get('/me', checkLogin, function (req, res, next) {
 });
 
 async function respondPasswordChanged(req, res) {
-    const currentPassword = req.body.currentPassword ?? req.body.oldpassword;
-    const newPassword = req.body.newPassword ?? req.body.newpassword;
+    const currentPassword = req.body.currentPassword;
+    const newPassword = req.body.newPassword;
     const userWithPass = await userController.FindByIdWithPassword(req.user.id);
     if (!bcrypt.compareSync(currentPassword, userWithPass.password_hash)) {
         return res.status(400).json({ message: 'Mat khau hien tai khong dung' });
@@ -120,15 +121,6 @@ router.post(
     }
 );
 
-/** Legacy path — body oldpassword / newpassword */
-router.post('/changepassword', checkLogin, ChangPasswordValidator, handleResultValidatorApi, async function (req, res, next) {
-    try {
-        await respondPasswordChanged(req, res);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-});
-
 router.post('/logout', checkLogin, function (req, res, next) {
     res.cookie('token_login_tungNT', null, {
         maxAge: 0,
@@ -138,12 +130,33 @@ router.post('/logout', checkLogin, function (req, res, next) {
     res.send('logout');
 });
 
+function passwordResetTtlMs() {
+    const n = parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES, 10);
+    const minutes = Number.isFinite(n) && n > 0 ? n : 60;
+    return minutes * 60 * 1000;
+}
+
+function frontendResetPasswordUrl(plainToken) {
+    const base = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    const path = `/reset-password/${encodeURIComponent(plainToken)}`;
+    if (process.env.FRONTEND_USE_HASH_ROUTER === '0' || process.env.FRONTEND_USE_HASH_ROUTER === 'false') {
+        return `${base}${path}`;
+    }
+    return `${base}/#${path}`;
+}
+
 router.post('/forgotpassword', async function (req, res, next) {
     try {
         const { email } = req.body;
-        const user = await userController.FindByEmail(email);
+        const user = email ? await userController.FindByEmail(email) : null;
         if (user) {
-            await sendMail(user.email, 'http://localhost:3000/api/v1/auth/resetpassword');
+            const { plain, hash } = generateResetToken();
+            const expires = new Date(Date.now() + passwordResetTtlMs());
+            await userController.UpdateUser(user.id, {
+                password_reset_token_hash: hash,
+                password_reset_expires: expires
+            });
+            await sendMail(user.email, frontendResetPasswordUrl(plain));
         }
         res.send('check mail de biet');
     } catch (err) {
@@ -151,8 +164,33 @@ router.post('/forgotpassword', async function (req, res, next) {
     }
 });
 
-router.post('/resetpassword/:token', async function (req, res, next) {
-    res.status(501).json({ message: 'Chuc nang nay hien chua duoc ho tro' });
-});
+router.post(
+    '/resetpassword/:token',
+    ResetPasswordNewValidator,
+    handleResultValidatorApi,
+    async function (req, res, next) {
+        try {
+            const rawToken = req.params.token;
+            if (!rawToken || String(rawToken).trim().length < 16) {
+                return res.status(400).json({ message: 'Token khong hop le' });
+            }
+            const tokenHash = hashResetToken(decodeURIComponent(rawToken));
+            const user = await userController.FindByPasswordResetHash(tokenHash);
+            if (!user) {
+                return res.status(400).json({ message: 'Lien ket khong hop le hoac da het han' });
+            }
+            const newPassword = req.body.newPassword;
+            await userController.UpdateUser(user.id, {
+                password_hash: newPassword,
+                password_changed_at: new Date(),
+                password_reset_token_hash: null,
+                password_reset_expires: null
+            });
+            res.json({ message: 'Dat lai mat khau thanh cong' });
+        } catch (err) {
+            res.status(500).json({ message: err.message });
+        }
+    }
+);
 
 module.exports = router;

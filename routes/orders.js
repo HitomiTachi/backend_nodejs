@@ -6,8 +6,12 @@ const OrderModel = require('../schemas/orders');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
 const { nextSequentialId } = require('../utils/id');
-const { effectiveUnitPrice } = require('../utils/mappers/cartDto');
 const { toOrderDto } = require('../utils/mappers/orderDto');
+const {
+    buildPricedOrderPayload,
+    createCouponRedemptionIfAny
+} = require('../services/orderPricing');
+const { computeShippingFee } = require('../utils/shippingFee');
 
 function activeProductFilter(productId) {
     return {
@@ -16,20 +20,7 @@ function activeProductFilter(productId) {
     };
 }
 
-function mergeOrderItems(rawItems) {
-    const merged = new Map();
-    if (!Array.isArray(rawItems)) {
-        return merged;
-    }
-    for (const line of rawItems) {
-        const productId = parseInt(String(line.productId), 10);
-        if (Number.isNaN(productId)) continue;
-        const q = Math.max(1, parseInt(String(line.quantity), 10) || 0);
-        if (q <= 0) continue;
-        merged.set(productId, (merged.get(productId) || 0) + q);
-    }
-    return merged;
-}
+const { mergeOrderItems } = require('../utils/mergeOrderItems');
 
 router.get('/', checkLogin, async function (req, res) {
     try {
@@ -61,6 +52,21 @@ router.get('/:id', checkLogin, async function (req, res) {
 router.post('/', checkLogin, async function (req, res) {
     const userId = Number(req.user.id);
     const rawItems = req.body.items;
+    const shippingRaw =
+        req.body.shippingAddress !== undefined ? req.body.shippingAddress : req.body.shipping_address;
+    const shippingAddress =
+        shippingRaw != null && String(shippingRaw).trim() !== '' ? String(shippingRaw).trim() : '';
+    if (!shippingAddress) {
+        return res.status(400).json({ message: 'Dia chi giao hang la bat buoc (shippingAddress)' });
+    }
+
+    const couponRaw =
+        req.body.couponCode !== undefined ? req.body.couponCode : req.body.coupon_code;
+    const couponCode =
+        couponRaw != null && String(couponRaw).trim() !== ''
+            ? String(couponRaw).trim()
+            : null;
+
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
         return res.status(400).json({ message: 'items phai la mang khong rong' });
     }
@@ -78,8 +84,7 @@ router.post('/', checkLogin, async function (req, res) {
         let totalPrice = 0;
 
         await session.withTransaction(async () => {
-            lineItems = [];
-            totalPrice = 0;
+            const resolvedRows = [];
 
             for (const [productId, quantity] of merged) {
                 const baseFilter = activeProductFilter(productId);
@@ -110,16 +115,19 @@ router.post('/', checkLogin, async function (req, res) {
                     row = upd;
                 }
 
-                const unit = effectiveUnitPrice(row);
-                totalPrice += unit * quantity;
-                lineItems.push({
-                    productId,
-                    productName: row.name || '',
-                    productImage: row.image != null ? row.image : null,
-                    quantity,
-                    priceAtOrder: unit
-                });
+                resolvedRows.push({ productId, quantity, product: row });
             }
+
+            const priced = await buildPricedOrderPayload(
+                resolvedRows,
+                userId,
+                couponCode,
+                session
+            );
+            lineItems = priced.items;
+            const goodsAfterDiscount = priced.grandTotal;
+            const shippingFee = computeShippingFee(goodsAfterDiscount);
+            totalPrice = goodsAfterDiscount + shippingFee;
 
             orderNumericId = await nextSequentialId(OrderModel);
             await OrderModel.create(
@@ -127,13 +135,22 @@ router.post('/', checkLogin, async function (req, res) {
                     {
                         id: orderNumericId,
                         userId,
+                        subtotal: priced.subtotal,
+                        totalTax: priced.totalTax,
+                        discountTotal: priced.discountTotal,
+                        couponCode: priced.coupon ? priced.coupon.code : null,
+                        couponId: priced.coupon ? priced.coupon.id : null,
+                        shippingFee,
                         totalPrice,
                         status: 'PENDING',
+                        shippingAddress,
                         items: lineItems
                     }
                 ],
                 { session }
             );
+
+            await createCouponRedemptionIfAny(session, priced.coupon, orderNumericId, userId);
         });
 
         const created = await OrderModel.findOne({ id: orderNumericId }).lean();

@@ -238,7 +238,7 @@ Không áp dụng convention kiểu `I[Name]Repository` hoặc `[Name]Controller
   - middleware function: `checkLogin`
   - middleware factory: `CheckPermission`
 - `utils/validatorHandler.js`:
-  - validators: `userCreateValidator`, `userUpdateValidator`, `RegisterValidator`, `ChangPasswordValidator`
+  - validators: `userCreateValidator`, `userUpdateValidator`, `RegisterValidator`, `ChangePasswordSpecValidator`
   - middleware: `handleResultValidator`
 - Helpers token/ID (PascalCase export keys): `RandomToken`, `IncrementalId`
 
@@ -329,7 +329,7 @@ Predicate hay dùng (products):
 
 ### 3.3 Validator boilerplate (express-validator)
 
-- Rule arrays: `RegisterValidator`, `userCreateValidator`, `userUpdateValidator`, `ChangPasswordValidator`
+- Rule arrays: `RegisterValidator`, `userCreateValidator`, `userUpdateValidator`, `ChangePasswordSpecValidator`
 - `handleResultValidator(req,res,next)`:
   - `let result = validationResult(req)`
   - nếu lỗi: `res.status(404).send(result.errors.map(e => e.msg)); return;`
@@ -374,7 +374,7 @@ Predicate hay dùng (products):
 1. **`GET /:id` soft-delete filter:** có route detail dùng điều kiện chưa đồng nhất với list (vd products/categories detail không filter `isDeleted` rõ ràng). Khi generate 100%, **giữ behavior theo file nguồn** đang dùng.
 2. **Casing message not found:** lúc `"ID NOT FOUND"` (uppercase), lúc `{ message: "id not found" }` (lowercase).
 3. **`routes/users.js`:** có đoạn dùng `userModel` / `userController` — đảm bảo import đúng khi refactor/generate.
-4. **`routes/auth.js`:** reset password / changepassword có chỗ không trả response thành công rõ ràng (hoặc thiếu `await` khi `user.save()`).
+4. **`routes/auth.js`:** forgot/reset password có chỗ không trả response thành công rõ ràng (hoặc thiếu `await` khi `user.save()`).
 5. **`==` vs `===`:** dùng `==` trong một vài chỗ (vd `findIndex` với `e.product == product`).
 6. **Status create error:** có nơi trả `404` + `error.message` thay vì `400/500`.
 

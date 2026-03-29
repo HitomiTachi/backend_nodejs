@@ -14,6 +14,8 @@ const categorySchema = new mongoose.Schema({
     icon: String,
     /** URL ảnh đại diện danh mục (storefront / menu); tuỳ chọn */
     imageUrl: String,
+    /** Nhóm thuế logic (DEFAULT, ZERO, …). null → hệ thống dùng DEFAULT. */
+    taxGroup: { type: String, default: null },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: Number, default: null }
@@ -28,6 +30,28 @@ function stripDoc(doc) {
     return o;
 }
 
+/**
+ * Thứ tự hiển thị chuẩn: danh mục gốc (parent_id null) theo tên A–Z,
+ * rồi từng nhóm con theo parent_id số, trong mỗi nhóm A–Z (tiếng Việt).
+ * Khớp menu storefront khi client nhóm theo parent mà không sort lại từng cấp.
+ */
+function sortCategoryRowsVi(rows) {
+    return [...rows].sort(function (a, b) {
+        const aRoot = a.parent_id == null || a.parent_id === '';
+        const bRoot = b.parent_id == null || b.parent_id === '';
+        if (aRoot !== bRoot) {
+            return aRoot ? -1 : 1;
+        }
+        if (!aRoot) {
+            const diff = Number(a.parent_id) - Number(b.parent_id);
+            if (diff !== 0) {
+                return diff;
+            }
+        }
+        return String(a.name || '').localeCompare(String(b.name || ''), 'vi');
+    });
+}
+
 const Category = {
     async find(conditions = {}) {
         const q = Object.keys(conditions).length ? conditions : {};
@@ -37,7 +61,7 @@ const Category = {
             q.$and = [{ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] }];
         }
         const docs = await CategoryModel.find(q).lean();
-        return docs.map(stripDoc);
+        return sortCategoryRowsVi(docs.map(stripDoc));
     },
 
     async findOne(conditions) {

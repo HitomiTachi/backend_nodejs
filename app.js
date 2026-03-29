@@ -37,6 +37,7 @@ connectDB().catch(function (err) {
 app.use('/', require('./routes/index'));
 
 app.use('/api', require('./routes/api'));
+app.use('/api/checkout', require('./routes/checkout'));
 
 app.use('/api/v1/users', require('./routes/users'));
 app.use('/api/v1/auth', require('./routes/auth'));
@@ -45,6 +46,7 @@ app.use('/api/v1/products', require('./routes/products'));
 app.use('/api/v1/categories', require('./routes/categories'));
 app.use('/api/v1/orders', require('./routes/orders'));
 app.use('/api/v1/inventories', require('./routes/inventories'));
+app.use('/api/v1/coupons', require('./routes/coupons'));
 
 app.use('/api/users', require('./routes/users'));
 app.use('/api/auth', require('./routes/auth'));
@@ -53,12 +55,14 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/inventories', require('./routes/inventories'));
+app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/v1/cart', require('./routes/cart'));
 app.use('/api/v1/profile', require('./routes/profile'));
 app.use('/api/v1/uploads', require('./routes/uploads'));
+app.use('/api/v1/checkout', require('./routes/checkout'));
 
 app.use(function (req, res, next) {
     next(createError(404));

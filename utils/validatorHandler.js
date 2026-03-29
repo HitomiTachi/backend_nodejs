@@ -30,14 +30,14 @@ module.exports = {
         body('password').notEmpty().withMessage('password khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 
-    ChangPasswordValidator: [
-        body('oldpassword').notEmpty().withMessage('old password khong duoc de trong'),
-        body('newpassword').notEmpty().withMessage('new password khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
-    ],
-
     /** TechHome spec: POST /auth/change-password — body currentPassword, newPassword (camelCase) */
     ChangePasswordSpecValidator: [
         body('currentPassword').notEmpty().withMessage('currentPassword khong duoc de trong'),
+        body('newPassword').notEmpty().withMessage('newPassword khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
+    ],
+
+    /** POST /auth/resetpassword/:token — body newPassword */
+    ResetPasswordNewValidator: [
         body('newPassword').notEmpty().withMessage('newPassword khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 

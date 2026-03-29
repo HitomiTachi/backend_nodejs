@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema(
         email: { type: String, unique: true, index: true },
         password_hash: String,
         password_changed_at: Date,
+        password_reset_token_hash: { type: String, default: null, index: true, sparse: true },
+        password_reset_expires: { type: Date, default: null },
         phone: String,
         gender: String,
         date_of_birth: Date,
@@ -44,6 +46,15 @@ const User = {
 
     async findByIdWithPassword(id) {
         const doc = await UserModel.findOne({ id: Number(id) }).lean();
+        return stripDoc(doc);
+    },
+
+    async findByPasswordResetHash(tokenHash) {
+        const doc = await UserModel.findOne({
+            password_reset_token_hash: tokenHash,
+            password_reset_expires: { $gt: new Date() },
+            $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }]
+        }).lean();
         return stripDoc(doc);
     },
 
