@@ -18,6 +18,8 @@ const productSchema = new mongoose.Schema({
     slug: { type: String, index: true },
     price: Number,
     category_id: Number,
+    /** Ghi đè taxGroup so với category khi cần */
+    taxGroup: { type: String, default: null },
     description: String,
     image: String,
     images: [String],
@@ -72,13 +74,26 @@ const Product = {
     },
 
     /**
-     * Storefront list: filter category_id, search name, pagination. Bỏ sản phẩm soft-delete.
+     * Map storefront `sort` query → Mongoose sort object. Unknown values fall back to id ascending.
+     */
+    _catalogSort(sortRaw) {
+        const s = sortRaw != null ? String(sortRaw).trim().toLowerCase() : '';
+        if (s === 'id_desc' || s === 'newest') return { id: -1 };
+        if (s === 'price_asc') return { price: 1, id: 1 };
+        if (s === 'price_desc') return { price: -1, id: 1 };
+        if (s === 'popular' || s === 'best_seller') return { is_best_seller: -1, id: 1 };
+        return { id: 1 };
+    },
+
+    /**
+     * Storefront list: filter category_id, search name, pagination, optional sort. Bỏ sản phẩm soft-delete.
      */
     async findCatalog(params) {
         const categoryId = params.categoryId;
         const qText = params.q != null ? String(params.q).trim() : '';
         const pageRaw = params.page;
         const sizeRaw = params.size;
+        const sortSpec = this._catalogSort(params.sort);
 
         const filter = { $and: [notDeletedFilter()] };
         if (categoryId != null && categoryId !== '') {
@@ -96,7 +111,7 @@ const Product = {
 
         const hasPage = pageRaw !== null && pageRaw !== undefined && pageRaw !== '';
         const hasSize = sizeRaw !== null && sizeRaw !== undefined && sizeRaw !== '';
-        let queryBuilder = ProductModel.find(filter).sort({ id: 1 });
+        let queryBuilder = ProductModel.find(filter).sort(sortSpec);
         if (hasPage && hasSize) {
             const pageNum = Math.max(0, parseInt(pageRaw, 10));
             const sizeNum = Math.min(200, Math.max(1, parseInt(sizeRaw, 10)));

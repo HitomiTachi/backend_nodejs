@@ -39,7 +39,10 @@ router.get('/:id/products', async function (req, res, next) {
     try {
         const category = await Category.findById(req.params.id);
         if (!category) return res.status(404).json({ message: 'ID NOT FOUND' });
-        const products = await Product.findCatalog({ categoryId: req.params.id });
+        const products = await Product.findCatalog({
+            categoryId: req.params.id,
+            sort: req.query.sort
+        });
         return res.json(products.map(toProductDto));
     } catch (error) {
         return res.status(500).json({ message: error.message });

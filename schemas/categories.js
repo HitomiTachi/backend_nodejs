@@ -14,6 +14,8 @@ const categorySchema = new mongoose.Schema({
     icon: String,
     /** URL ảnh đại diện danh mục (storefront / menu); tuỳ chọn */
     imageUrl: String,
+    /** Nhóm thuế logic (DEFAULT, ZERO, …). null → hệ thống dùng DEFAULT. */
+    taxGroup: { type: String, default: null },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: Number, default: null }
