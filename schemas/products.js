@@ -3,6 +3,7 @@ const { nextSequentialId } = require('../utils/id');
 const Category = require('./categories');
 const { escapeRegex } = require('../utils/mappers/catalogDto');
 const { enrichProductSpecs } = require('../utils/productSpecsEnricher');
+const { normalizeSku } = require('../utils/sku');
 
 const colorSchema = new mongoose.Schema(
     {
@@ -23,7 +24,16 @@ const productSchema = new mongoose.Schema({
     description: String,
     image: String,
     images: [String],
-    sku: String,
+    sku: {
+        type: String,
+        required: true,
+        maxlength: 64,
+        unique: true,
+        set(v) {
+            if (v == null) return '';
+            return String(v).trim().toUpperCase();
+        }
+    },
     old_price: Number,
     salePrice: Number,
     stock: Number,
@@ -152,6 +162,16 @@ const Product = {
         if (!doc) return null;
         if (publicOnly && doc.isDeleted === true) return null;
         return enrichProduct(doc);
+    },
+
+    /** @param {number} [excludeProductId] — bỏ qua sản phẩm này (PUT đổi SKU) */
+    async findOneBySku(sku, excludeProductId) {
+        const normalized = normalizeSku(sku);
+        if (!normalized) return null;
+        const q = { sku: normalized };
+        if (excludeProductId != null) q.id = { $ne: Number(excludeProductId) };
+        const doc = await ProductModel.findOne(q).lean();
+        return doc;
     },
 
     /**
