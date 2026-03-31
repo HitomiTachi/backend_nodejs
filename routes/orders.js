@@ -36,9 +36,9 @@ const ORDER_STATUS = {
 
 const ALLOWED_STATUS_TRANSITIONS = {
     [ORDER_STATUS.PENDING]: [ORDER_STATUS.PROCESSING, ORDER_STATUS.CANCELLED],
-    [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPING, ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPING, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.SHIPPING]: [ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
-    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED],
     [ORDER_STATUS.DELIVERED]: [],
     [ORDER_STATUS.CANCELLED]: []
 };
@@ -69,6 +69,22 @@ function parseOptionalDate(value) {
     if (value == null || String(value).trim() === '') return null;
     const dt = new Date(value);
     return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+async function restoreProductStockForOrder(orderDoc) {
+    if (!orderDoc || !Array.isArray(orderDoc.items) || orderDoc.items.length === 0) return;
+    for (const item of orderDoc.items) {
+        const productId = Number(item && item.productId);
+        const quantity = Number(item && item.quantity);
+        if (!Number.isFinite(productId) || !Number.isFinite(quantity) || quantity <= 0) {
+            continue;
+        }
+        await ProductModel.findOneAndUpdate(
+            { id: productId },
+            { $inc: { stock: quantity } },
+            { new: false }
+        ).lean();
+    }
 }
 
 const RETURN_STATUS = {
@@ -425,6 +441,16 @@ router.patch('/admin/:id/status', checkLogin, CheckPermission('ADMIN'), async fu
             });
         }
 
+        const noteRaw = req.body.note;
+        const note = noteRaw != null && String(noteRaw).trim() !== '' ? String(noteRaw).trim() : null;
+        if (nextStatus === ORDER_STATUS.CANCELLED && !note) {
+            return res.status(400).json({ message: 'Vui long nhap ly do huy don (note)' });
+        }
+
+        if (nextStatus === ORDER_STATUS.CANCELLED) {
+            await restoreProductStockForOrder(existing);
+        }
+
         const updated = await OrderModel.findOneAndUpdate(
             { id: orderId },
             { $set: { status: nextStatus } },
@@ -434,7 +460,13 @@ router.patch('/admin/:id/status', checkLogin, CheckPermission('ADMIN'), async fu
             return res.status(404).json({ message: 'Don hang khong ton tai' });
         }
 
-        await appendOrderStatusHistory(orderId, currentStatus, nextStatus, req.user && req.user.id, req.body.note);
+        await appendOrderStatusHistory(
+            orderId,
+            currentStatus,
+            nextStatus,
+            req.user && req.user.id,
+            note || `Transition ${currentStatus} -> ${nextStatus}`
+        );
 
         res.json(toOrderDto(updated));
     } catch (err) {
