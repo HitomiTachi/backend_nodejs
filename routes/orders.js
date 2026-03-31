@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
 const mongoose = require('mongoose');
-const { checkLogin } = require('../utils/authHandler');
+const { checkLogin, CheckPermission } = require('../utils/authHandler');
 const OrderModel = require('../schemas/orders');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
@@ -21,6 +21,70 @@ function activeProductFilter(productId) {
 }
 
 const { mergeOrderItems } = require('../utils/mergeOrderItems');
+
+router.get('/admin', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const pageRaw = req.query.page;
+        const sizeRaw = req.query.size;
+        const statusRaw = req.query.status;
+        const userIdRaw = req.query.userId;
+
+        const hasPage = pageRaw !== undefined && pageRaw !== null && String(pageRaw).trim() !== '';
+        const hasSize = sizeRaw !== undefined && sizeRaw !== null && String(sizeRaw).trim() !== '';
+        const page = hasPage ? Math.max(0, parseInt(String(pageRaw), 10)) : 0;
+        const size = hasSize ? Math.min(200, Math.max(1, parseInt(String(sizeRaw), 10))) : 20;
+
+        if ((hasPage && Number.isNaN(page)) || (hasSize && Number.isNaN(size))) {
+            return res.status(400).json({ message: 'page/size khong hop le' });
+        }
+
+        const filter = {};
+        if (statusRaw != null && String(statusRaw).trim() !== '') {
+            filter.status = String(statusRaw).trim().toUpperCase();
+        }
+        if (userIdRaw != null && String(userIdRaw).trim() !== '') {
+            const parsedUserId = parseInt(String(userIdRaw), 10);
+            if (Number.isNaN(parsedUserId)) {
+                return res.status(400).json({ message: 'userId khong hop le' });
+            }
+            filter.userId = parsedUserId;
+        }
+
+        const [total, docs] = await Promise.all([
+            OrderModel.countDocuments(filter),
+            OrderModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(page * size)
+                .limit(size)
+                .lean()
+        ]);
+
+        res.json({
+            total,
+            page,
+            size,
+            items: docs.map(toOrderDto)
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/admin/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const doc = await OrderModel.findOne({ id: orderId }).lean();
+        if (!doc) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+        res.json(toOrderDto(doc));
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
 router.get('/', checkLogin, async function (req, res) {
     try {
