@@ -22,6 +22,30 @@ function activeProductFilter(productId) {
 
 const { mergeOrderItems } = require('../utils/mergeOrderItems');
 
+const ORDER_STATUS = {
+    PENDING: 'PENDING',
+    PROCESSING: 'PROCESSING',
+    SHIPPING: 'SHIPPING',
+    SHIPPED: 'SHIPPED',
+    DELIVERED: 'DELIVERED',
+    CANCELLED: 'CANCELLED'
+};
+
+const ALLOWED_STATUS_TRANSITIONS = {
+    [ORDER_STATUS.PENDING]: [ORDER_STATUS.PROCESSING, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPING, ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.SHIPPING]: [ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.DELIVERED]: [],
+    [ORDER_STATUS.CANCELLED]: []
+};
+
+function normalizeOrderStatus(value) {
+    return String(value || '')
+        .trim()
+        .toUpperCase();
+}
+
 router.get('/admin', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
     try {
         const pageRaw = req.query.page;
@@ -81,6 +105,54 @@ router.get('/admin/:id', checkLogin, CheckPermission('ADMIN'), async function (r
             return res.status(404).json({ message: 'Don hang khong ton tai' });
         }
         res.json(toOrderDto(doc));
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.patch('/admin/:id/status', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+
+        const nextStatus = normalizeOrderStatus(req.body.status);
+        if (!nextStatus || !Object.prototype.hasOwnProperty.call(ALLOWED_STATUS_TRANSITIONS, nextStatus)) {
+            return res.status(400).json({ message: 'status khong hop le' });
+        }
+
+        const existing = await OrderModel.findOne({ id: orderId }).lean();
+        if (!existing) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+
+        const currentStatus = normalizeOrderStatus(existing.status);
+        if (!currentStatus || !Object.prototype.hasOwnProperty.call(ALLOWED_STATUS_TRANSITIONS, currentStatus)) {
+            return res.status(400).json({ message: 'Trang thai hien tai khong hop le' });
+        }
+
+        if (currentStatus === nextStatus) {
+            return res.json(toOrderDto(existing));
+        }
+
+        const allowedNext = ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
+        if (!allowedNext.includes(nextStatus)) {
+            return res.status(400).json({
+                message: `Khong the chuyen trang thai tu ${currentStatus} sang ${nextStatus}`
+            });
+        }
+
+        const updated = await OrderModel.findOneAndUpdate(
+            { id: orderId },
+            { $set: { status: nextStatus } },
+            { new: true }
+        ).lean();
+        if (!updated) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+
+        res.json(toOrderDto(updated));
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
