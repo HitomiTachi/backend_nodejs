@@ -140,84 +140,106 @@ router.post('/', checkLogin, async function (req, res) {
         return res.status(400).json({ message: 'Khong co dong don hop le' });
     }
 
-    const session = await mongoose.startSession();
-    let orderNumericId;
+    async function createOrderCore(sessionOrNull) {
+        const resolvedRows = [];
 
-    try {
-        let lineItems = [];
-        let totalPrice = 0;
+        for (const [productId, quantity] of merged) {
+            const baseFilter = activeProductFilter(productId);
+            let findQuery = ProductModel.findOne(baseFilter);
+            if (sessionOrNull) {
+                findQuery = findQuery.session(sessionOrNull);
+            }
+            const prod = await findQuery.lean();
+            if (!prod) {
+                const err = new Error(`San pham ${productId} khong ton tai`);
+                err.status = 400;
+                throw err;
+            }
 
-        await session.withTransaction(async () => {
-            const resolvedRows = [];
-
-            for (const [productId, quantity] of merged) {
-                const baseFilter = activeProductFilter(productId);
-                const prod = await ProductModel.findOne(baseFilter).session(session).lean();
-                if (!prod) {
-                    const err = new Error(`San pham ${productId} khong ton tai`);
+            let row = prod;
+            if (prod.stock != null) {
+                if (prod.stock < quantity) {
+                    const err = new Error(`San pham ${productId} khong du ton kho`);
                     err.status = 400;
                     throw err;
                 }
-
-                let row = prod;
-                if (prod.stock != null) {
-                    if (prod.stock < quantity) {
-                        const err = new Error(`San pham ${productId} khong du ton kho`);
-                        err.status = 400;
-                        throw err;
-                    }
-                    const upd = await ProductModel.findOneAndUpdate(
-                        { ...baseFilter, stock: { $gte: quantity } },
-                        { $inc: { stock: -quantity } },
-                        { new: true, session }
-                    ).lean();
-                    if (!upd) {
-                        const err = new Error(`San pham ${productId} khong du ton kho`);
-                        err.status = 400;
-                        throw err;
-                    }
-                    row = upd;
+                const updateOptions = sessionOrNull ? { new: true, session: sessionOrNull } : { new: true };
+                const upd = await ProductModel.findOneAndUpdate(
+                    { ...baseFilter, stock: { $gte: quantity } },
+                    { $inc: { stock: -quantity } },
+                    updateOptions
+                ).lean();
+                if (!upd) {
+                    const err = new Error(`San pham ${productId} khong du ton kho`);
+                    err.status = 400;
+                    throw err;
                 }
-
-                resolvedRows.push({ productId, quantity, product: row });
+                row = upd;
             }
 
-            const priced = await buildPricedOrderPayload(
-                resolvedRows,
-                userId,
-                couponCode,
-                session
-            );
-            lineItems = priced.items;
-            const goodsAfterDiscount = priced.grandTotal;
-            const shippingFee = computeShippingFee(goodsAfterDiscount);
-            totalPrice = goodsAfterDiscount + shippingFee;
+            resolvedRows.push({ productId, quantity, product: row });
+        }
 
-            orderNumericId = await nextSequentialId(OrderModel);
-            await OrderModel.create(
-                [
-                    {
-                        id: orderNumericId,
-                        userId,
-                        subtotal: priced.subtotal,
-                        totalTax: priced.totalTax,
-                        discountTotal: priced.discountTotal,
-                        couponCode: priced.coupon ? priced.coupon.code : null,
-                        couponId: priced.coupon ? priced.coupon.id : null,
-                        shippingFee,
-                        totalPrice,
-                        status: 'PENDING',
-                        shippingAddress,
-                        items: lineItems
-                    }
-                ],
-                { session }
-            );
+        const priced = await buildPricedOrderPayload(
+            resolvedRows,
+            userId,
+            couponCode,
+            sessionOrNull || null
+        );
+        const goodsAfterDiscount = priced.grandTotal;
+        const shippingFee = computeShippingFee(goodsAfterDiscount);
+        const totalPrice = goodsAfterDiscount + shippingFee;
+        const orderNumericId = await nextSequentialId(OrderModel);
 
-            await createCouponRedemptionIfAny(session, priced.coupon, orderNumericId, userId);
-        });
+        const orderDoc = {
+            id: orderNumericId,
+            userId,
+            subtotal: priced.subtotal,
+            totalTax: priced.totalTax,
+            discountTotal: priced.discountTotal,
+            couponCode: priced.coupon ? priced.coupon.code : null,
+            couponId: priced.coupon ? priced.coupon.id : null,
+            shippingFee,
+            totalPrice,
+            status: 'PENDING',
+            shippingAddress,
+            items: priced.items
+        };
 
-        const created = await OrderModel.findOne({ id: orderNumericId }).lean();
+        if (sessionOrNull) {
+            await OrderModel.create([orderDoc], { session: sessionOrNull });
+        } else {
+            await OrderModel.create(orderDoc);
+        }
+
+        await createCouponRedemptionIfAny(sessionOrNull || null, priced.coupon, orderNumericId, userId);
+
+        return orderNumericId;
+    }
+
+    let session = null;
+    try {
+        session = await mongoose.startSession();
+        let createdOrderId = null;
+
+        try {
+            await session.withTransaction(async () => {
+                createdOrderId = await createOrderCore(session);
+            });
+        } catch (txErr) {
+            const msg = String(txErr && txErr.message ? txErr.message : '');
+            const txUnsupported =
+                msg.includes('Transaction numbers are only allowed on a replica set member or mongos') ||
+                msg.includes('does not support transactions');
+
+            if (!txUnsupported) {
+                throw txErr;
+            }
+            // Fallback for local standalone MongoDB (no replica set): continue without transaction.
+            createdOrderId = await createOrderCore(null);
+        }
+
+        const created = await OrderModel.findOne({ id: createdOrderId }).lean();
         if (!created) {
             return res.status(500).json({ message: 'Khong lay duoc don hang sau khi tao' });
         }
@@ -226,7 +248,9 @@ router.post('/', checkLogin, async function (req, res) {
         const status = err.status || 500;
         res.status(status).json({ message: err.message });
     } finally {
-        session.endSession();
+        if (session) {
+            session.endSession();
+        }
     }
 });
 
