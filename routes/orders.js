@@ -293,13 +293,6 @@ router.get('/admin/:id/returns', checkLogin, CheckPermission('ADMIN'), async fun
             filter.$or = [{ reason: rx }, { note: rx }, { 'items.reason': rx }];
         }
 
-        // Backward compatible: no filter/pagination -> return plain array as before.
-        const usedPagingOrFilter = parsed.hasPage || parsed.hasSize || hasValue(statusRaw) || hasValue(qRaw);
-        if (!usedPagingOrFilter) {
-            const rows = await ReturnModel.find(filter).sort({ createdAt: -1 }).lean();
-            return res.json(rows);
-        }
-
         const [total, items] = await Promise.all([
             ReturnModel.countDocuments(filter),
             ReturnModel.find(filter)
