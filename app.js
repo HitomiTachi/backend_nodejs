@@ -59,10 +59,12 @@ app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/uploads', require('./routes/uploads'));
+app.use('/api/admin', require('./routes/admin'));
 app.use('/api/v1/cart', require('./routes/cart'));
 app.use('/api/v1/profile', require('./routes/profile'));
 app.use('/api/v1/uploads', require('./routes/uploads'));
 app.use('/api/v1/checkout', require('./routes/checkout'));
+app.use('/api/v1/admin', require('./routes/admin'));
 
 app.use(function (req, res, next) {
     next(createError(404));
