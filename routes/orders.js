@@ -3,6 +3,7 @@ var router = express.Router();
 const mongoose = require('mongoose');
 const { checkLogin, CheckPermission } = require('../utils/authHandler');
 const OrderModel = require('../schemas/orders');
+const OrderStatusHistoryModel = require('../schemas/orderStatusHistories');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
 const { nextSequentialId } = require('../utils/id');
@@ -44,6 +45,18 @@ function normalizeOrderStatus(value) {
     return String(value || '')
         .trim()
         .toUpperCase();
+}
+
+async function appendOrderStatusHistory(orderId, fromStatus, toStatus, changedByUserId, note) {
+    const historyId = await nextSequentialId(OrderStatusHistoryModel);
+    await OrderStatusHistoryModel.create({
+        id: historyId,
+        orderId: Number(orderId),
+        fromStatus: fromStatus ? normalizeOrderStatus(fromStatus) : null,
+        toStatus: normalizeOrderStatus(toStatus),
+        changedByUserId: changedByUserId != null ? Number(changedByUserId) : null,
+        note: note != null && String(note).trim() !== '' ? String(note).trim() : null
+    });
 }
 
 router.get('/admin', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
@@ -110,6 +123,29 @@ router.get('/admin/:id', checkLogin, CheckPermission('ADMIN'), async function (r
     }
 });
 
+router.get('/admin/:id/status-history', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const rows = await OrderStatusHistoryModel.find({ orderId }).sort({ createdAt: -1 }).lean();
+        res.json(
+            rows.map((row) => ({
+                id: row.id,
+                orderId: row.orderId,
+                fromStatus: row.fromStatus,
+                toStatus: row.toStatus,
+                changedByUserId: row.changedByUserId,
+                note: row.note,
+                createdAt: row.createdAt
+            }))
+        );
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 router.patch('/admin/:id/status', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
     try {
         const orderId = parseInt(String(req.params.id), 10);
@@ -151,6 +187,8 @@ router.patch('/admin/:id/status', checkLogin, CheckPermission('ADMIN'), async fu
         if (!updated) {
             return res.status(404).json({ message: 'Don hang khong ton tai' });
         }
+
+        await appendOrderStatusHistory(orderId, currentStatus, nextStatus, req.user && req.user.id, req.body.note);
 
         res.json(toOrderDto(updated));
     } catch (err) {
@@ -315,6 +353,7 @@ router.post('/', checkLogin, async function (req, res) {
         if (!created) {
             return res.status(500).json({ message: 'Khong lay duoc don hang sau khi tao' });
         }
+        await appendOrderStatusHistory(created.id, null, created.status, req.user && req.user.id, 'Order created');
         res.status(201).json(toOrderDto(created));
     } catch (err) {
         const status = err.status || 500;
