@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { checkLogin, CheckPermission } = require('../utils/authHandler');
 const OrderModel = require('../schemas/orders');
 const OrderStatusHistoryModel = require('../schemas/orderStatusHistories');
+const ShipmentModel = require('../schemas/shipments');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
 const { nextSequentialId } = require('../utils/id');
@@ -45,6 +46,28 @@ function normalizeOrderStatus(value) {
     return String(value || '')
         .trim()
         .toUpperCase();
+}
+
+const SHIPMENT_STATUS = {
+    PENDING: 'PENDING',
+    SHIPPED: 'SHIPPED',
+    IN_TRANSIT: 'IN_TRANSIT',
+    DELIVERED: 'DELIVERED',
+    FAILED: 'FAILED',
+    RETURNED: 'RETURNED',
+    CANCELLED: 'CANCELLED'
+};
+
+function normalizeShipmentStatus(value) {
+    return String(value || '')
+        .trim()
+        .toUpperCase();
+}
+
+function parseOptionalDate(value) {
+    if (value == null || String(value).trim() === '') return null;
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
 async function appendOrderStatusHistory(orderId, fromStatus, toStatus, changedByUserId, note) {
@@ -141,6 +164,93 @@ router.get('/admin/:id/status-history', checkLogin, CheckPermission('ADMIN'), as
                 createdAt: row.createdAt
             }))
         );
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/admin/:id/shipment', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const row = await ShipmentModel.findOne({ orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Van don chua ton tai' });
+        }
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.put('/admin/:id/shipment', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+
+        const order = await OrderModel.findOne({ id: orderId }).lean();
+        if (!order) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+
+        const statusRaw = req.body.status;
+        const nextShipmentStatus =
+            statusRaw == null || String(statusRaw).trim() === ''
+                ? SHIPMENT_STATUS.PENDING
+                : normalizeShipmentStatus(statusRaw);
+        if (!Object.prototype.hasOwnProperty.call(SHIPMENT_STATUS, nextShipmentStatus)) {
+            return res.status(400).json({ message: 'shipment status khong hop le' });
+        }
+
+        const shippedAt = parseOptionalDate(req.body.shippedAt);
+        const estimatedDeliveryAt = parseOptionalDate(req.body.estimatedDeliveryAt);
+        const deliveredAt = parseOptionalDate(req.body.deliveredAt);
+        if (req.body.shippedAt && !shippedAt) {
+            return res.status(400).json({ message: 'shippedAt khong hop le' });
+        }
+        if (req.body.estimatedDeliveryAt && !estimatedDeliveryAt) {
+            return res.status(400).json({ message: 'estimatedDeliveryAt khong hop le' });
+        }
+        if (req.body.deliveredAt && !deliveredAt) {
+            return res.status(400).json({ message: 'deliveredAt khong hop le' });
+        }
+
+        const updateDoc = {
+            carrier:
+                req.body.carrier != null && String(req.body.carrier).trim() !== ''
+                    ? String(req.body.carrier).trim()
+                    : null,
+            trackingNumber:
+                req.body.trackingNumber != null && String(req.body.trackingNumber).trim() !== ''
+                    ? String(req.body.trackingNumber).trim()
+                    : null,
+            status: nextShipmentStatus,
+            shippedAt,
+            estimatedDeliveryAt,
+            deliveredAt,
+            note:
+                req.body.note != null && String(req.body.note).trim() !== ''
+                    ? String(req.body.note).trim()
+                    : null
+        };
+
+        const current = await ShipmentModel.findOne({ orderId }).lean();
+        if (current) {
+            const updated = await ShipmentModel.findOneAndUpdate({ orderId }, { $set: updateDoc }, { new: true }).lean();
+            return res.json(updated);
+        }
+
+        const id = await nextSequentialId(ShipmentModel);
+        const created = await ShipmentModel.create({
+            id,
+            orderId,
+            ...updateDoc
+        });
+        return res.status(201).json(created.toObject());
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
