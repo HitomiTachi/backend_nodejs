@@ -5,6 +5,7 @@ const { checkLogin, CheckPermission } = require('../utils/authHandler');
 const OrderModel = require('../schemas/orders');
 const OrderStatusHistoryModel = require('../schemas/orderStatusHistories');
 const ShipmentModel = require('../schemas/shipments');
+const ReturnModel = require('../schemas/returns');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
 const { nextSequentialId } = require('../utils/id');
@@ -68,6 +69,30 @@ function parseOptionalDate(value) {
     if (value == null || String(value).trim() === '') return null;
     const dt = new Date(value);
     return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+const RETURN_STATUS = {
+    REQUESTED: 'REQUESTED',
+    APPROVED: 'APPROVED',
+    REJECTED: 'REJECTED',
+    RECEIVED: 'RECEIVED',
+    REFUNDED: 'REFUNDED',
+    CANCELLED: 'CANCELLED'
+};
+
+const ALLOWED_RETURN_STATUS_TRANSITIONS = {
+    [RETURN_STATUS.REQUESTED]: [RETURN_STATUS.APPROVED, RETURN_STATUS.REJECTED, RETURN_STATUS.CANCELLED],
+    [RETURN_STATUS.APPROVED]: [RETURN_STATUS.RECEIVED, RETURN_STATUS.CANCELLED],
+    [RETURN_STATUS.REJECTED]: [],
+    [RETURN_STATUS.RECEIVED]: [RETURN_STATUS.REFUNDED],
+    [RETURN_STATUS.REFUNDED]: [],
+    [RETURN_STATUS.CANCELLED]: []
+};
+
+function normalizeReturnStatus(value) {
+    return String(value || '')
+        .trim()
+        .toUpperCase();
 }
 
 async function appendOrderStatusHistory(orderId, fromStatus, toStatus, changedByUserId, note) {
@@ -180,6 +205,117 @@ router.get('/admin/:id/shipment', checkLogin, CheckPermission('ADMIN'), async fu
             return res.status(404).json({ message: 'Van don chua ton tai' });
         }
         res.json(row);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/admin/:id/returns', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const rows = await ReturnModel.find({ orderId }).sort({ createdAt: -1 }).lean();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.post('/admin/:id/returns', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const order = await OrderModel.findOne({ id: orderId }).lean();
+        if (!order) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+
+        const itemsRaw = Array.isArray(req.body.items) ? req.body.items : [];
+        if (itemsRaw.length === 0) {
+            return res.status(400).json({ message: 'items phai la mang khong rong' });
+        }
+        const items = itemsRaw
+            .map((it) => ({
+                productId: Number(it.productId),
+                quantity: Number(it.quantity),
+                reason: it.reason != null && String(it.reason).trim() !== '' ? String(it.reason).trim() : null
+            }))
+            .filter((it) => Number.isFinite(it.productId) && Number.isFinite(it.quantity) && it.quantity > 0);
+        if (items.length === 0) {
+            return res.status(400).json({ message: 'items khong hop le' });
+        }
+
+        const id = await nextSequentialId(ReturnModel);
+        const created = await ReturnModel.create({
+            id,
+            orderId,
+            userId: Number(order.userId),
+            status: RETURN_STATUS.REQUESTED,
+            reason: req.body.reason != null && String(req.body.reason).trim() !== '' ? String(req.body.reason).trim() : null,
+            note: req.body.note != null && String(req.body.note).trim() !== '' ? String(req.body.note).trim() : null,
+            items,
+            requestedAt: new Date()
+        });
+        res.status(201).json(created.toObject());
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.patch('/admin/:id/returns/:returnId/status', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        const returnId = parseInt(String(req.params.returnId), 10);
+        if (Number.isNaN(orderId) || Number.isNaN(returnId)) {
+            return res.status(400).json({ message: 'id return/order khong hop le' });
+        }
+
+        const row = await ReturnModel.findOne({ id: returnId, orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Yeu cau tra hang khong ton tai' });
+        }
+
+        const currentStatus = normalizeReturnStatus(row.status);
+        const nextStatus = normalizeReturnStatus(req.body.status);
+        if (!Object.prototype.hasOwnProperty.call(RETURN_STATUS, nextStatus)) {
+            return res.status(400).json({ message: 'return status khong hop le' });
+        }
+        if (currentStatus === nextStatus) {
+            return res.json(row);
+        }
+        const allowedNext = ALLOWED_RETURN_STATUS_TRANSITIONS[currentStatus] || [];
+        if (!allowedNext.includes(nextStatus)) {
+            return res.status(400).json({
+                message: `Khong the chuyen return status tu ${currentStatus} sang ${nextStatus}`
+            });
+        }
+
+        const now = new Date();
+        const updateDoc = {
+            status: nextStatus,
+            note: req.body.note != null && String(req.body.note).trim() !== '' ? String(req.body.note).trim() : row.note
+        };
+        if (nextStatus === RETURN_STATUS.APPROVED) updateDoc.approvedAt = now;
+        if (nextStatus === RETURN_STATUS.REJECTED) updateDoc.rejectedAt = now;
+        if (nextStatus === RETURN_STATUS.RECEIVED) updateDoc.receivedAt = now;
+        if (
+            nextStatus === RETURN_STATUS.REFUNDED ||
+            nextStatus === RETURN_STATUS.CANCELLED ||
+            nextStatus === RETURN_STATUS.REJECTED
+        ) {
+            updateDoc.closedAt = now;
+        }
+
+        const updated = await ReturnModel.findOneAndUpdate(
+            { id: returnId, orderId },
+            { $set: updateDoc },
+            { new: true }
+        ).lean();
+        res.json(updated);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
