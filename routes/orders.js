@@ -6,6 +6,7 @@ const OrderModel = require('../schemas/orders');
 const OrderStatusHistoryModel = require('../schemas/orderStatusHistories');
 const ShipmentModel = require('../schemas/shipments');
 const ReturnModel = require('../schemas/returns');
+const RefundModel = require('../schemas/refunds');
 require('../schemas/products');
 const ProductModel = mongoose.model('Product');
 const { nextSequentialId } = require('../utils/id');
@@ -106,6 +107,45 @@ const ALLOWED_RETURN_STATUS_TRANSITIONS = {
 };
 
 function normalizeReturnStatus(value) {
+    return String(value || '')
+        .trim()
+        .toUpperCase();
+}
+
+function hasValue(value) {
+    return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parsePageSize(pageRaw, sizeRaw) {
+    const hasPage = hasValue(pageRaw);
+    const hasSize = hasValue(sizeRaw);
+    const page = hasPage ? Math.max(0, parseInt(String(pageRaw), 10)) : 0;
+    const size = hasSize ? Math.min(200, Math.max(1, parseInt(String(sizeRaw), 10))) : 20;
+    if ((hasPage && Number.isNaN(page)) || (hasSize && Number.isNaN(size))) {
+        return { error: 'page/size khong hop le' };
+    }
+    return { page, size, hasPage, hasSize };
+}
+
+const REFUND_STATUS = {
+    PENDING: 'PENDING',
+    APPROVED: 'APPROVED',
+    PAID: 'PAID',
+    REJECTED: 'REJECTED'
+};
+
+const ALLOWED_REFUND_STATUS_TRANSITIONS = {
+    [REFUND_STATUS.PENDING]: [REFUND_STATUS.APPROVED, REFUND_STATUS.REJECTED],
+    [REFUND_STATUS.APPROVED]: [REFUND_STATUS.PAID],
+    [REFUND_STATUS.PAID]: [],
+    [REFUND_STATUS.REJECTED]: []
+};
+
+function normalizeRefundStatus(value) {
     return String(value || '')
         .trim()
         .toUpperCase();
@@ -232,8 +272,65 @@ router.get('/admin/:id/returns', checkLogin, CheckPermission('ADMIN'), async fun
         if (Number.isNaN(orderId)) {
             return res.status(400).json({ message: 'id don hang khong hop le' });
         }
-        const rows = await ReturnModel.find({ orderId }).sort({ createdAt: -1 }).lean();
-        res.json(rows);
+        const parsed = parsePageSize(req.query.page, req.query.size);
+        if (parsed.error) {
+            return res.status(400).json({ message: parsed.error });
+        }
+
+        const statusRaw = req.query.status;
+        const qRaw = req.query.q;
+        const filter = { orderId };
+        if (hasValue(statusRaw)) {
+            const status = normalizeReturnStatus(statusRaw);
+            if (!Object.prototype.hasOwnProperty.call(RETURN_STATUS, status)) {
+                return res.status(400).json({ message: 'return status khong hop le' });
+            }
+            filter.status = status;
+        }
+        if (hasValue(qRaw)) {
+            const q = String(qRaw).trim();
+            const rx = new RegExp(escapeRegex(q), 'i');
+            filter.$or = [{ reason: rx }, { note: rx }, { 'items.reason': rx }];
+        }
+
+        // Backward compatible: no filter/pagination -> return plain array as before.
+        const usedPagingOrFilter = parsed.hasPage || parsed.hasSize || hasValue(statusRaw) || hasValue(qRaw);
+        if (!usedPagingOrFilter) {
+            const rows = await ReturnModel.find(filter).sort({ createdAt: -1 }).lean();
+            return res.json(rows);
+        }
+
+        const [total, items] = await Promise.all([
+            ReturnModel.countDocuments(filter),
+            ReturnModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(parsed.page * parsed.size)
+                .limit(parsed.size)
+                .lean()
+        ]);
+        res.json({
+            total,
+            page: parsed.page,
+            size: parsed.size,
+            items
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/admin/:id/returns/:returnId', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        const returnId = parseInt(String(req.params.returnId), 10);
+        if (Number.isNaN(orderId) || Number.isNaN(returnId)) {
+            return res.status(400).json({ message: 'id return/order khong hop le' });
+        }
+        const row = await ReturnModel.findOne({ id: returnId, orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Yeu cau tra hang khong ton tai' });
+        }
+        res.json(row);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -277,6 +374,52 @@ router.post('/admin/:id/returns', checkLogin, CheckPermission('ADMIN'), async fu
             requestedAt: new Date()
         });
         res.status(201).json(created.toObject());
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.put('/admin/:id/returns/:returnId', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        const returnId = parseInt(String(req.params.returnId), 10);
+        if (Number.isNaN(orderId) || Number.isNaN(returnId)) {
+            return res.status(400).json({ message: 'id return/order khong hop le' });
+        }
+
+        const row = await ReturnModel.findOne({ id: returnId, orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Yeu cau tra hang khong ton tai' });
+        }
+        const currentStatus = normalizeReturnStatus(row.status);
+        if (currentStatus !== RETURN_STATUS.REQUESTED) {
+            return res.status(409).json({ message: 'Chi cho phep sua return o trang thai REQUESTED' });
+        }
+
+        const updateDoc = {
+            reason: hasValue(req.body.reason) ? String(req.body.reason).trim() : row.reason || null,
+            note: hasValue(req.body.note) ? String(req.body.note).trim() : row.note || null
+        };
+        if (Array.isArray(req.body.items) && req.body.items.length > 0) {
+            const items = req.body.items
+                .map((it) => ({
+                    productId: Number(it.productId),
+                    quantity: Number(it.quantity),
+                    reason: hasValue(it.reason) ? String(it.reason).trim() : null
+                }))
+                .filter((it) => Number.isFinite(it.productId) && Number.isFinite(it.quantity) && it.quantity > 0);
+            if (items.length === 0) {
+                return res.status(400).json({ message: 'items khong hop le' });
+            }
+            updateDoc.items = items;
+        }
+
+        const updated = await ReturnModel.findOneAndUpdate(
+            { id: returnId, orderId },
+            { $set: updateDoc },
+            { new: true }
+        ).lean();
+        res.json(updated);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -331,6 +474,209 @@ router.patch('/admin/:id/returns/:returnId/status', checkLogin, CheckPermission(
             { $set: updateDoc },
             { new: true }
         ).lean();
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.delete('/admin/:id/returns/:returnId', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        const returnId = parseInt(String(req.params.returnId), 10);
+        if (Number.isNaN(orderId) || Number.isNaN(returnId)) {
+            return res.status(400).json({ message: 'id return/order khong hop le' });
+        }
+        const row = await ReturnModel.findOne({ id: returnId, orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Yeu cau tra hang khong ton tai' });
+        }
+        const now = new Date();
+        const updated = await ReturnModel.findOneAndUpdate(
+            { id: returnId, orderId },
+            {
+                $set: {
+                    status: RETURN_STATUS.CANCELLED,
+                    closedAt: now,
+                    note: hasValue(req.body && req.body.note) ? String(req.body.note).trim() : row.note || null
+                }
+            },
+            { new: true }
+        ).lean();
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/admin/:id/refunds', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const parsed = parsePageSize(req.query.page, req.query.size);
+        if (parsed.error) {
+            return res.status(400).json({ message: parsed.error });
+        }
+
+        const filter = { orderId };
+        if (hasValue(req.query.status)) {
+            const status = normalizeRefundStatus(req.query.status);
+            if (!Object.prototype.hasOwnProperty.call(REFUND_STATUS, status)) {
+                return res.status(400).json({ message: 'refund status khong hop le' });
+            }
+            filter.status = status;
+        }
+        if (hasValue(req.query.q)) {
+            const rx = new RegExp(escapeRegex(String(req.query.q).trim()), 'i');
+            filter.$or = [{ method: rx }, { transactionRef: rx }, { note: rx }];
+        }
+
+        const [total, items] = await Promise.all([
+            RefundModel.countDocuments(filter),
+            RefundModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(parsed.page * parsed.size)
+                .limit(parsed.size)
+                .lean()
+        ]);
+        res.json({
+            total,
+            page: parsed.page,
+            size: parsed.size,
+            items
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.post('/admin/:id/refunds', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(orderId)) {
+            return res.status(400).json({ message: 'id don hang khong hop le' });
+        }
+        const order = await OrderModel.findOne({ id: orderId }).lean();
+        if (!order) {
+            return res.status(404).json({ message: 'Don hang khong ton tai' });
+        }
+
+        const returnId = parseInt(String(req.body.returnId), 10);
+        if (Number.isNaN(returnId)) {
+            return res.status(400).json({ message: 'returnId khong hop le' });
+        }
+        const returnDoc = await ReturnModel.findOne({ id: returnId, orderId }).lean();
+        if (!returnDoc) {
+            return res.status(404).json({ message: 'Yeu cau tra hang khong ton tai' });
+        }
+        if (normalizeReturnStatus(returnDoc.status) !== RETURN_STATUS.RECEIVED) {
+            return res.status(409).json({ message: 'Chi tao refund khi return o trang thai RECEIVED' });
+        }
+
+        // Security: never accept/store raw card details.
+        const forbiddenKeys = ['cardNumber', 'cvv', 'cardCvv', 'card_number', 'card_cvv', 'expiry', 'expMonth', 'expYear'];
+        for (const k of forbiddenKeys) {
+            if (Object.prototype.hasOwnProperty.call(req.body, k)) {
+                return res.status(400).json({ message: 'Khong duoc gui thong tin the/CVV' });
+            }
+        }
+
+        const amount = Number(req.body.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ message: 'amount khong hop le' });
+        }
+        const method = hasValue(req.body.method) ? String(req.body.method).trim() : null;
+        if (!method) {
+            return res.status(400).json({ message: 'method la bat buoc' });
+        }
+
+        const existed = await RefundModel.findOne({ orderId, returnId }).lean();
+        if (existed) {
+            return res.status(409).json({ message: 'Refund cho return nay da ton tai' });
+        }
+
+        const id = await nextSequentialId(RefundModel);
+        const created = await RefundModel.create({
+            id,
+            orderId,
+            returnId,
+            status: REFUND_STATUS.PENDING,
+            amount,
+            currency: hasValue(req.body.currency) ? String(req.body.currency).trim().toUpperCase() : 'VND',
+            method,
+            transactionRef: hasValue(req.body.transactionRef) ? String(req.body.transactionRef).trim() : null,
+            note: hasValue(req.body.note) ? String(req.body.note).trim() : null,
+            createdByUserId: req.user && req.user.id ? Number(req.user.id) : null,
+            meta: req.body.meta && typeof req.body.meta === 'object' ? req.body.meta : null
+        });
+        res.status(201).json(created.toObject());
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.patch('/admin/:id/refunds/:refundId/status', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
+    try {
+        const orderId = parseInt(String(req.params.id), 10);
+        const refundId = parseInt(String(req.params.refundId), 10);
+        if (Number.isNaN(orderId) || Number.isNaN(refundId)) {
+            return res.status(400).json({ message: 'id refund/order khong hop le' });
+        }
+
+        const row = await RefundModel.findOne({ id: refundId, orderId }).lean();
+        if (!row) {
+            return res.status(404).json({ message: 'Refund khong ton tai' });
+        }
+        const currentStatus = normalizeRefundStatus(row.status);
+        const nextStatus = normalizeRefundStatus(req.body.status);
+        if (!Object.prototype.hasOwnProperty.call(REFUND_STATUS, nextStatus)) {
+            return res.status(400).json({ message: 'refund status khong hop le' });
+        }
+        if (currentStatus === nextStatus) {
+            return res.json(row);
+        }
+        const allowedNext = ALLOWED_REFUND_STATUS_TRANSITIONS[currentStatus] || [];
+        if (!allowedNext.includes(nextStatus)) {
+            return res.status(400).json({
+                message: `Khong the chuyen refund status tu ${currentStatus} sang ${nextStatus}`
+            });
+        }
+
+        const now = new Date();
+        const updateDoc = {
+            status: nextStatus,
+            note: hasValue(req.body.note) ? String(req.body.note).trim() : row.note || null,
+            processedByUserId: req.user && req.user.id ? Number(req.user.id) : row.processedByUserId || null
+        };
+        if (nextStatus === REFUND_STATUS.APPROVED) updateDoc.approvedAt = now;
+        if (nextStatus === REFUND_STATUS.REJECTED) updateDoc.rejectedAt = now;
+        if (nextStatus === REFUND_STATUS.PAID) updateDoc.paidAt = now;
+        if (hasValue(req.body.transactionRef)) {
+            updateDoc.transactionRef = String(req.body.transactionRef).trim();
+        }
+
+        const updated = await RefundModel.findOneAndUpdate(
+            { id: refundId, orderId },
+            { $set: updateDoc },
+            { new: true }
+        ).lean();
+
+        if (nextStatus === REFUND_STATUS.PAID) {
+            await ReturnModel.findOneAndUpdate(
+                { id: updated.returnId, orderId },
+                {
+                    $set: {
+                        status: RETURN_STATUS.REFUNDED,
+                        closedAt: now,
+                        note: hasValue(req.body.note) ? String(req.body.note).trim() : 'Refund paid'
+                    }
+                },
+                { new: false }
+            ).lean();
+        }
+
         res.json(updated);
     } catch (err) {
         res.status(500).json({ message: err.message });
