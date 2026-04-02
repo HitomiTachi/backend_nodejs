@@ -33,6 +33,23 @@ const orderSchema = new mongoose.Schema(
         /** Tổng khách trả: tiền hàng sau giảm + phí ship (đã gồm VAT trong giá hàng). */
         totalPrice: { type: Number, required: true },
         status: { type: String, default: 'PENDING' },
+        /** Thanh toán: UNPAID | PENDING | PAID | FAILED | CANCELLED | EXPIRED */
+        paymentStatus: {
+            type: String,
+            enum: ['UNPAID', 'PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED'],
+            default: 'UNPAID'
+        },
+        /** Cổng thanh toán đã chọn, ví dụ: MOMO. */
+        paymentMethod: { type: String, default: null },
+        /** Gateway order id/request id để đối soát callback từ cổng. */
+        paymentGatewayOrderId: { type: String, default: null, index: true },
+        paymentRequestId: { type: String, default: null },
+        /** Mã giao dịch từ cổng khi thanh toán thành công. */
+        paymentTransactionId: { type: String, default: null },
+        paidAt: { type: Date, default: null },
+        paymentFailureReason: { type: String, default: null },
+        /** Lưu metadata cổng (payUrl, deeplink, qrCodeUrl, ipn trace...). */
+        paymentMeta: { type: mongoose.Schema.Types.Mixed, default: null },
         /** Snapshot địa chỉ giao hàng tại thời điểm đặt (một chuỗi đầy đủ). */
         shippingAddress: { type: String, default: null },
         items: [orderItemSchema]
