@@ -75,6 +75,28 @@ function toOrderDto(doc) {
     } else {
         dto.shippingAddress = null;
     }
+    if (o.paymentMethod != null && String(o.paymentMethod).trim() !== '') {
+        dto.paymentMethod = String(o.paymentMethod).trim();
+    }
+    if (o.paymentStatus != null && String(o.paymentStatus).trim() !== '') {
+        dto.paymentStatus = String(o.paymentStatus).trim();
+    }
+    if (o.paymentGatewayOrderId != null && String(o.paymentGatewayOrderId).trim() !== '') {
+        dto.paymentGatewayOrderId = String(o.paymentGatewayOrderId).trim();
+    }
+    if (o.paymentRequestId != null && String(o.paymentRequestId).trim() !== '') {
+        dto.paymentRequestId = String(o.paymentRequestId).trim();
+    }
+    if (o.paymentTransactionId != null && String(o.paymentTransactionId).trim() !== '') {
+        dto.paymentTransactionId = String(o.paymentTransactionId).trim();
+    }
+    if (o.paidAt != null) {
+        const paidAt = o.paidAt instanceof Date ? o.paidAt.toISOString() : String(o.paidAt);
+        dto.paidAt = paidAt;
+    }
+    if (o.paymentFailureReason != null && String(o.paymentFailureReason).trim() !== '') {
+        dto.paymentFailureReason = String(o.paymentFailureReason).trim();
+    }
     return dto;
 }
 

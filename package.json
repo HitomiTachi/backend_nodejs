@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "nodemon ./bin/www",
-    "backfill:sku": "node scripts/backfill-product-sku.js"
+    "backfill:sku": "node scripts/backfill-product-sku.js",
+    "momo:pending:report": "node scripts/momo-pending-report.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1017.0",
