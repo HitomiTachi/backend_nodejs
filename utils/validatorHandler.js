@@ -10,41 +10,46 @@ const options = {
     }
 };
 
-const passwordMsg = `password dai it nhat ${options.password.minLength} ki tu, trong do co it nhat ${options.password.minNumbers} so, ${options.password.minUppercase} chu hoa, ${options.password.minLowercase} chu thuong, ${options.password.minSymbols} ki tu dac biet`;
+const passwordMsg = `Mật khẩu ít nhất ${options.password.minLength} ký tự, gồm ít nhất ${options.password.minNumbers} chữ số, ${options.password.minUppercase} chữ hoa, ${options.password.minLowercase} chữ thường và ${options.password.minSymbols} ký tự đặc biệt.`;
 
 module.exports = {
     userCreateValidator: [
-        body('email').notEmpty().withMessage('Email khong duoc rong').isEmail().withMessage('email sai dinh dang'),
-        body('name').notEmpty().withMessage('Ten khong duoc de trong'),
+        body('email').notEmpty().withMessage('Email không được để trống.').isEmail().withMessage('Email không đúng định dạng.'),
+        body('name').notEmpty().withMessage('Tên không được để trống.'),
         body('password').isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 
     userUpdateValidator: [
-        body('email').optional({ checkFalsy: true }).isEmail().withMessage('email sai dinh dang').normalizeEmail(),
-        body('name').optional().notEmpty().withMessage('Ten khong duoc de trong')
+        body('email').optional({ checkFalsy: true }).isEmail().withMessage('Email không đúng định dạng.').normalizeEmail(),
+        body('name').optional().notEmpty().withMessage('Tên không được để trống.')
     ],
 
     RegisterValidator: [
-        body('email').notEmpty().withMessage('email khong duoc rong').bail().isEmail().withMessage('email sai dinh dang').normalizeEmail(),
-        body('name').notEmpty().withMessage('ten khong duoc de trong'),
-        body('password').notEmpty().withMessage('password khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
+        body('email').notEmpty().withMessage('Email không được để trống.').bail().isEmail().withMessage('Email không đúng định dạng.').normalizeEmail(),
+        body('name').notEmpty().withMessage('Họ tên không được để trống.'),
+        body('password').notEmpty().withMessage('Mật khẩu không được để trống.').bail().isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 
     /** TechHome spec: POST /auth/change-password — body currentPassword, newPassword (camelCase) */
     ChangePasswordSpecValidator: [
-        body('currentPassword').notEmpty().withMessage('currentPassword khong duoc de trong'),
-        body('newPassword').notEmpty().withMessage('newPassword khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
+        body('currentPassword').notEmpty().withMessage('Mật khẩu hiện tại không được để trống.'),
+        body('newPassword').notEmpty().withMessage('Mật khẩu mới không được để trống.').bail().isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 
     /** POST /auth/resetpassword/:token — body newPassword */
     ResetPasswordNewValidator: [
-        body('newPassword').notEmpty().withMessage('newPassword khong duoc de trong').bail().isStrongPassword(options.password).withMessage(passwordMsg)
+        body('newPassword').notEmpty().withMessage('Mật khẩu mới không được để trống.').bail().isStrongPassword(options.password).withMessage(passwordMsg)
     ],
 
+    /** Trả JSON thống nhất `{ message, errors }` để frontend hiển thị rõ (không còn mảng JSON thuần). */
     handleResultValidator: function (req, res, next) {
         const result = validationResult(req);
         if (result.errors.length > 0) {
-            return res.status(400).send(result.errors.map(e => e.msg));
+            const msgs = result.errors.map((e) => e.msg);
+            return res.status(400).json({
+                message: msgs.length === 1 ? msgs[0] : msgs.join(' '),
+                errors: msgs
+            });
         }
         next();
     },
@@ -53,7 +58,11 @@ module.exports = {
     handleResultValidatorApi: function (req, res, next) {
         const result = validationResult(req);
         if (result.errors.length > 0) {
-            return res.status(400).json({ message: result.errors[0].msg });
+            const msgs = result.errors.map((e) => e.msg);
+            return res.status(400).json({
+                message: msgs.length === 1 ? msgs[0] : msgs.join(' '),
+                errors: msgs
+            });
         }
         next();
     }

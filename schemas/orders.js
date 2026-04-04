@@ -6,11 +6,8 @@ const orderItemSchema = new mongoose.Schema(
         productName: { type: String, required: true },
         productImage: { type: String, default: null },
         quantity: { type: Number, required: true },
-        /** Đơn giá GROSS (đã gồm VAT) tại thời điểm đặt — khớp storefront */
+        /** Đơn giá tại thời điểm đặt (giá hiển thị storefront) */
         priceAtOrder: { type: Number, required: true },
-        taxGroup: { type: String, default: null },
-        taxRate: { type: Number, default: null },
-        taxAmount: { type: Number, default: null },
         priceBasis: { type: String, enum: ['GROSS', 'NET'], default: 'GROSS' },
         lineGross: { type: Number, default: null },
         lineDiscount: { type: Number, default: null }
@@ -24,13 +21,12 @@ const orderSchema = new mongoose.Schema(
         userId: { type: Number, required: true, index: true },
         /** Tổng tiền hàng (GROSS) trước giảm giá */
         subtotal: { type: Number, default: null },
-        totalTax: { type: Number, default: null },
         discountTotal: { type: Number, default: null },
         couponCode: { type: String, default: null },
         couponId: { type: Number, default: null },
         /** Phí vận chuyển do server tính (snapshot). */
         shippingFee: { type: Number, default: null },
-        /** Tổng khách trả: tiền hàng sau giảm + phí ship (đã gồm VAT trong giá hàng). */
+        /** Tổng khách trả: tiền hàng sau giảm + phí ship */
         totalPrice: { type: Number, required: true },
         status: { type: String, default: 'PENDING' },
         /** Thanh toán: UNPAID | PENDING | PAID | FAILED | CANCELLED | EXPIRED */
@@ -39,9 +35,9 @@ const orderSchema = new mongoose.Schema(
             enum: ['UNPAID', 'PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED'],
             default: 'UNPAID'
         },
-        /** Cổng thanh toán đã chọn, ví dụ: MOMO. */
+        /** Phương thức thanh toán (COD, …). */
         paymentMethod: { type: String, default: null },
-        /** Gateway order id/request id để đối soát callback từ cổng. */
+        /** Gateway order id (nếu có cổng thanh toán online). */
         paymentGatewayOrderId: { type: String, default: null, index: true },
         paymentRequestId: { type: String, default: null },
         /** Mã giao dịch từ cổng khi thanh toán thành công. */

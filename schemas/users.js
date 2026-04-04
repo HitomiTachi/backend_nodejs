@@ -15,6 +15,24 @@ const userSchema = new mongoose.Schema(
         gender: String,
         date_of_birth: Date,
         default_address: String,
+        /** Sổ địa chỉ giao hàng — id, label, line + các ô form (tuỳ chọn, tương thích bản cũ chỉ có line). */
+        saved_addresses: {
+            type: [
+                {
+                    id: { type: String, required: true },
+                    label: { type: String, default: '' },
+                    line: { type: String, required: true },
+                    recipientName: { type: String, default: '' },
+                    recipientPhone: { type: String, default: '' },
+                    street: { type: String, default: '' },
+                    ward: { type: String, default: '' },
+                    district: { type: String, default: '' },
+                    province: { type: String, default: '' },
+                    note: { type: String, default: '' }
+                }
+            ],
+            default: []
+        },
         avatar_url: String,
         role: { type: String, enum: ['USER', 'ADMIN', 'MODERATOR'], default: 'USER' },
         status: { type: Boolean, default: true, index: true },

@@ -43,7 +43,6 @@ function toProductDto(row) {
         categoryId: row.category_id != null ? row.category_id : 0,
         categoryName: row.category_name || '',
         stock: row.stock != null ? row.stock : 0,
-        featured: !!row.featured,
         specifications: row.specifications != null ? row.specifications : null
     };
 

@@ -14,15 +14,6 @@ function toOrderItemDto(row) {
     } else {
         item.productImage = null;
     }
-    if (row.taxGroup != null && row.taxGroup !== '') {
-        item.taxGroup = row.taxGroup;
-    }
-    if (row.taxRate != null && Number.isFinite(Number(row.taxRate))) {
-        item.taxRate = Number(row.taxRate);
-    }
-    if (row.taxAmount != null && Number.isFinite(Number(row.taxAmount))) {
-        item.taxAmount = Number(row.taxAmount);
-    }
     if (row.priceBasis != null) {
         item.priceBasis = row.priceBasis;
     }
@@ -54,9 +45,6 @@ function toOrderDto(doc) {
     };
     if (o.subtotal != null && Number.isFinite(Number(o.subtotal))) {
         dto.subtotal = Number(o.subtotal);
-    }
-    if (o.totalTax != null && Number.isFinite(Number(o.totalTax))) {
-        dto.totalTax = Number(o.totalTax);
     }
     if (o.discountTotal != null && Number.isFinite(Number(o.discountTotal)) && Number(o.discountTotal) > 0) {
         dto.discountTotal = Number(o.discountTotal);

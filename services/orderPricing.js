@@ -1,25 +1,13 @@
 const { effectiveUnitPrice } = require('../utils/mappers/cartDto');
-const { roundVnd, taxFromGrossAmount } = require('../utils/tax/vatCalculator');
-const { resolveEffectiveTaxRate } = require('../utils/tax/resolveEffectiveTaxRate');
-const Category = require('../schemas/categories');
+const { deactivateExpiredCoupons } = require('../utils/couponExpirySync');
 const CouponModel = require('../schemas/coupons');
 const CouponRedemptionModel = require('../schemas/couponRedemptions');
 const { nextSequentialId } = require('../utils/id');
 
 const PRICE_BASIS = 'GROSS';
 
-/**
- * @param {object} product lean doc
- * @param {object|null} category lean doc
- */
-function resolveTaxGroupForProduct(product, category) {
-    if (product && product.taxGroup != null && String(product.taxGroup).trim() !== '') {
-        return String(product.taxGroup).trim();
-    }
-    if (category && category.taxGroup != null && String(category.taxGroup).trim() !== '') {
-        return String(category.taxGroup).trim();
-    }
-    return 'DEFAULT';
+function roundVnd(amount) {
+    return Math.round(Number(amount));
 }
 
 function allocateDiscountAcrossLines(lineGrosses, discountTotal) {
@@ -61,6 +49,7 @@ async function validateAndComputeCouponDiscount(
     if (couponCode == null || String(couponCode).trim() === '') {
         return { discountTotal: 0, coupon: null };
     }
+    await deactivateExpiredCoupons();
     if (userId == null || Number(userId) <= 0) {
         const err = new Error('Can dang nhap de ap dung ma giam gia');
         err.status = 401;
@@ -150,7 +139,7 @@ async function validateAndComputeCouponDiscount(
 }
 
 /**
- * Build priced order lines with tax snapshot (GROSS pricing). Applies optional coupon at order level with proportional allocation.
+ * Build priced order lines (GROSS unit pricing). Applies optional coupon at order level with proportional allocation.
  *
  * @param {Array<{ productId: number, quantity: number, product: object }>} resolvedRows — lean product docs after stock check
  * @param {number} userId
@@ -158,19 +147,12 @@ async function validateAndComputeCouponDiscount(
  * @param {import('mongoose').ClientSession|null} session
  */
 async function buildPricedOrderPayload(resolvedRows, userId, couponCode, session) {
-    const at = new Date();
     const preliminary = [];
 
     for (const row of resolvedRows) {
         const prod = row.product;
         const productId = row.productId;
         const quantity = row.quantity;
-        const category =
-            prod.category_id != null
-                ? await Category.findById(prod.category_id, { includeDeleted: false })
-                : null;
-        const taxGroup = resolveTaxGroupForProduct(prod, category);
-        const rate = await resolveEffectiveTaxRate(taxGroup, at, session);
         const unit = effectiveUnitPrice(prod);
         const lineGross = roundVnd(unit * quantity);
 
@@ -180,8 +162,6 @@ async function buildPricedOrderPayload(resolvedRows, userId, couponCode, session
             productImage: prod.image != null ? prod.image : null,
             quantity,
             priceAtOrder: unit,
-            taxGroup,
-            taxRate: rate,
             priceBasis: PRICE_BASIS,
             lineGross,
             categoryId: prod.category_id != null ? Number(prod.category_id) : null
@@ -211,22 +191,15 @@ async function buildPricedOrderPayload(resolvedRows, userId, couponCode, session
     const allocations = allocateDiscountAcrossLines(lineGrosses, discountTotal);
 
     const items = [];
-    let totalTax = 0;
     for (let i = 0; i < preliminary.length; i++) {
         const row = preliminary[i];
         const alloc = allocations[i] || 0;
-        const discountedGross = Math.max(0, row.lineGross - alloc);
-        const taxAmount = taxFromGrossAmount(discountedGross, row.taxRate);
-        totalTax += taxAmount;
         items.push({
             productId: row.productId,
             productName: row.productName,
             productImage: row.productImage,
             quantity: row.quantity,
             priceAtOrder: row.priceAtOrder,
-            taxGroup: row.taxGroup,
-            taxRate: row.taxRate,
-            taxAmount,
             priceBasis: row.priceBasis,
             lineGross: row.lineGross,
             lineDiscount: alloc
@@ -238,7 +211,6 @@ async function buildPricedOrderPayload(resolvedRows, userId, couponCode, session
     return {
         items,
         subtotal,
-        totalTax,
         discountTotal,
         grandTotal,
         coupon: coupon
@@ -301,6 +273,5 @@ module.exports = {
     buildPricedOrderPayload,
     buildCheckoutQuote,
     createCouponRedemptionIfAny,
-    resolveTaxGroupForProduct,
     PRICE_BASIS
 };

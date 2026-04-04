@@ -8,6 +8,20 @@ require('dotenv').config();
 var app = require('../app');
 var debug = require('debug')('nnptud-c6:server');
 var http = require('http');
+var { ServerSocket } = require('../utils/socket');
+
+function parseCorsOriginsForSocket() {
+    var raw = process.env.CORS_ORIGINS;
+    if (!raw || !String(raw).trim()) {
+        return undefined;
+    }
+    return String(raw)
+        .split(',')
+        .map(function (s) {
+            return s.trim();
+        })
+        .filter(Boolean);
+}
 
 /**
  * Get port from environment and store in Express.
@@ -21,6 +35,7 @@ app.set('port', port);
  */
 
 var server = http.createServer(app);
+ServerSocket(server, { corsOrigins: parseCorsOriginsForSocket() });
 
 /**
  * Listen on provided port, on all network interfaces.

@@ -33,7 +33,7 @@ router.post('/register', RegisterValidator, handleResultValidator, async functio
 
         const existing = await userController.FindByEmail(email);
         if (existing) {
-            return res.status(400).json({ message: 'Email da ton tai' });
+            return res.status(400).json({ message: 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.' });
         }
 
         const newUser = await userController.CreateAnUser(name, password, email);
@@ -56,17 +56,17 @@ router.post('/login', async function (req, res, next) {
         const email = req.body.email || req.body.username;
 
         if (!email || !password) {
-            return res.status(400).json({ message: 'Email va password khong duoc de trong' });
+            return res.status(400).json({ message: 'Vui lòng nhập email và mật khẩu.' });
         }
         const user = await userController.FindByEmail(email);
         if (!user) {
-            return res.status(403).json({ message: 'tai khoan khong ton tai' });
+            return res.status(403).json({ message: 'Không tìm thấy tài khoản với email này.' });
         }
         if (user.status === false) {
-            return res.status(403).json({ message: 'tai khoan dang bi ban' });
+            return res.status(403).json({ message: 'Tài khoản đã bị vô hiệu hóa. Liên hệ quản trị viên.' });
         }
         if (!bcrypt.compareSync(password, user.password_hash)) {
-            return res.status(403).json({ message: 'thong tin dang nhap khong dung' });
+            return res.status(403).json({ message: 'Mật khẩu không đúng. Vui lòng thử lại hoặc dùng “Quên mật khẩu”.' });
         }
         await userController.UpdateUser(user.id, { loginCount: Number(user.loginCount || 0) + 1 });
         const latestUser = await userController.FindById(user.id);
@@ -92,7 +92,7 @@ async function respondPasswordChanged(req, res) {
     const newPassword = req.body.newPassword;
     const userWithPass = await userController.FindByIdWithPassword(req.user.id);
     if (!bcrypt.compareSync(currentPassword, userWithPass.password_hash)) {
-        return res.status(400).json({ message: 'Mat khau hien tai khong dung' });
+        return res.status(400).json({ message: 'Mật khẩu hiện tại không đúng.' });
     }
     await userController.UpdateUser(req.user.id, {
         password_hash: newPassword,

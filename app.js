@@ -12,7 +12,9 @@ const corsOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:3001',
-    'http://127.0.0.1:3001'
+    'http://127.0.0.1:3001',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
 ];
 
 app.use(
@@ -60,11 +62,13 @@ app.use('/api/cart', require('./routes/cart'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/messages', require('./routes/messages'));
 app.use('/api/v1/cart', require('./routes/cart'));
 app.use('/api/v1/profile', require('./routes/profile'));
 app.use('/api/v1/uploads', require('./routes/uploads'));
 app.use('/api/v1/checkout', require('./routes/checkout'));
 app.use('/api/v1/admin', require('./routes/admin'));
+app.use('/api/v1/messages', require('./routes/messages'));
 
 app.use(function (req, res, next) {
     next(createError(404));

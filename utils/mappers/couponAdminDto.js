@@ -5,6 +5,8 @@
  */
 function toCouponAdminDto(doc, usedCount) {
     const validTo = doc.validTo ? new Date(doc.validTo) : null;
+    const now = Date.now();
+    const expiredByDate = validTo != null && !Number.isNaN(validTo.getTime()) && validTo.getTime() < now;
     return {
         id: doc.id,
         code: doc.code,
@@ -20,6 +22,8 @@ function toCouponAdminDto(doc, usedCount) {
         maxUses: doc.usageLimit != null ? doc.usageLimit : null,
         perUserLimit: doc.perUserLimit != null ? doc.perUserLimit : null,
         active: Boolean(doc.active),
+        /** true khi validTo đã qua (dù active vẫn có thể true nếu admin vừa bật lại chưa gia hạn) */
+        expiredByDate,
         usedCount: Number(usedCount) || 0,
         excludedProductIds: doc.excludedProductIds || [],
         applicableCategoryIds: doc.applicableCategoryIds || []

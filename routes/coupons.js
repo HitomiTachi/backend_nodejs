@@ -10,6 +10,7 @@ const {
     validateNewCoupon
 } = require('../utils/couponPayload');
 const { toCouponAdminDto } = require('../utils/mappers/couponAdminDto');
+const { deactivateExpiredCoupons } = require('../utils/couponExpirySync');
 
 function isDuplicateKeyError(err) {
     return err && (err.code === 11000 || err.code === 11001);
@@ -77,6 +78,7 @@ router.get('/', checkLogin, CheckPermission('ADMIN'), async function (req, res) 
 
 router.get('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res) {
     try {
+        await deactivateExpiredCoupons();
         const id = Number(req.params.id);
         if (!Number.isFinite(id) || id < 1) {
             return res.status(400).json({ message: 'ID khong hop le' });

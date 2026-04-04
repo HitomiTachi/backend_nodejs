@@ -64,3 +64,7 @@ typings/
 keys/
 *.pem
 *.postman_collection.json
+
+# Chat uploads (giữ .gitkeep)
+public/uploads/messages/*
+!public/uploads/messages/.gitkeep

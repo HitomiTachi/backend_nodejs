@@ -11,7 +11,7 @@ const { computeShippingFee } = require('../utils/shippingFee');
 /**
  * POST /checkout/quote
  * Body: { items: [{ productId, quantity }], couponCode? }
- * - Khách vẫn xem được tạm tính + thuế từ giá server.
+ * - Khách xem tạm tính từ giá server.
  * - Áp mã giảm giá cần đăng nhập (Authorization).
  */
 router.post('/quote', optionalAuth, async function (req, res) {
@@ -42,7 +42,6 @@ router.post('/quote', optionalAuth, async function (req, res) {
 
         res.json({
             subtotal: priced.subtotal,
-            totalTax: priced.totalTax,
             discountTotal: priced.discountTotal,
             goodsTotal,
             shippingFee,

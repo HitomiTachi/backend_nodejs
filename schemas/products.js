@@ -19,8 +19,6 @@ const productSchema = new mongoose.Schema({
     slug: { type: String, index: true },
     price: Number,
     category_id: Number,
-    /** Ghi đè taxGroup so với category khi cần */
-    taxGroup: { type: String, default: null },
     description: String,
     image: String,
     images: [String],
