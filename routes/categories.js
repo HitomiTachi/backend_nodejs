@@ -92,11 +92,11 @@ router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res,
     try {
         const rawName = req.body && req.body.name;
         const name = typeof rawName === 'string' ? rawName.trim() : '';
-        if (!name) return res.status(400).json({ message: 'NAME_REQUIRED' });
+        if (!name) return res.status(400).json({ message: 'Tên danh mục không được để trống.' });
         const slug = buildCategorySlug(name);
-        if (!slug) return res.status(400).json({ message: 'INVALID_SLUG' });
+        if (!slug) return res.status(400).json({ message: 'Không tạo được slug hợp lệ từ tên.' });
         const clash = await Category.findOne({ slug });
-        if (clash) return res.status(409).json({ message: 'DUPLICATE_SLUG' });
+        if (clash) return res.status(409).json({ message: 'Đã có danh mục trùng slug. Đổi tên khác.' });
         const data = { name, slug };
         if (req.body.icon !== undefined) data.icon = req.body.icon;
         if (req.body.imageUrl !== undefined) {
@@ -115,7 +115,7 @@ router.post('/', checkLogin, CheckPermission('ADMIN'), async function (req, res,
         res.json(toCategoryDto(newObj));
     } catch (error) {
         if (isDuplicateKeyError(error)) {
-            return res.status(409).json({ message: 'DUPLICATE_SLUG' });
+            return res.status(409).json({ message: 'Đã có danh mục trùng slug. Đổi tên khác.' });
         }
         res.status(400).json({ message: error.message });
     }
@@ -130,11 +130,11 @@ router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, re
         }
         if (data.name !== undefined) {
             const name = typeof data.name === 'string' ? data.name.trim() : '';
-            if (!name) return res.status(400).json({ message: 'NAME_REQUIRED' });
+            if (!name) return res.status(400).json({ message: 'Tên danh mục không được để trống.' });
             const slug = buildCategorySlug(name);
-            if (!slug) return res.status(400).json({ message: 'INVALID_SLUG' });
+            if (!slug) return res.status(400).json({ message: 'Không tạo được slug hợp lệ từ tên.' });
             const clash = await Category.findOneBySlugExcludingId(slug, req.params.id);
-            if (clash) return res.status(409).json({ message: 'DUPLICATE_SLUG' });
+            if (clash) return res.status(409).json({ message: 'Đã có danh mục trùng slug. Đổi tên khác.' });
             data.name = name;
             data.slug = slug;
         }
@@ -148,11 +148,11 @@ router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, re
             data.parent_id = p === null || p === 'null' || p === 'undefined' ? null : Number(p);
         }
         const result = await Category.update(req.params.id, data);
-        if (!result) return res.status(404).json({ message: 'ID NOT FOUND' });
+        if (!result) return res.status(404).json({ message: 'Không tìm thấy danh mục.' });
         res.status(200).json(toCategoryDto(result));
     } catch (error) {
         if (isDuplicateKeyError(error)) {
-            return res.status(409).json({ message: 'DUPLICATE_SLUG' });
+            return res.status(409).json({ message: 'Đã có danh mục trùng slug. Đổi tên khác.' });
         }
         res.status(400).json({ message: error.message });
     }
@@ -161,8 +161,8 @@ router.put('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, re
 router.delete('/:id', checkLogin, CheckPermission('ADMIN'), async function (req, res, next) {
     try {
         const deleted = await Category.delete(req.params.id, req.user && req.user.id);
-        if (!deleted) return res.status(404).json({ message: 'ID NOT FOUND' });
-        res.status(200).json({ message: 'deleted successfully' });
+        if (!deleted) return res.status(404).json({ message: 'Không tìm thấy danh mục.' });
+        res.status(200).json({ message: 'Đã ẩn danh mục khỏi cửa hàng.' });
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
